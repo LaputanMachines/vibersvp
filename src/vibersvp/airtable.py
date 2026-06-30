@@ -79,8 +79,6 @@ class AirtableRepo:
             email=(f.get("Email") or None),
             phone=(f.get("Phone") or None),
             event_id=event_links[0] if event_links else None,
-            email_consent=bool(f.get("Email consent")),
-            sms_consent=bool(f.get("SMS consent")),
             status=f.get("Status", ""),
         )
 

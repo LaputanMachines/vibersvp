@@ -40,8 +40,6 @@ Create a base (any name) with three tables. Field names must match exactly.
 | `Email` | Email | |
 | `Phone` | Phone number | E.164 ideally, e.g. `+12505550123` |
 | `Event` | Link to `Events` | |
-| `Email consent` | Checkbox | |
-| `SMS consent` | Checkbox | |
 | `Status` | Single select | `Going`, `Cancelled`, `Waitlist` — only `Going` gets reminders |
 | `Created` | Created time | optional |
 
@@ -60,7 +58,7 @@ Create a base (any name) with three tables. Field names must match exactly.
 
 ### The two front-ends (no code)
 - **RSVP form** — on the `RSVPs` table, create a **Form** view exposing Name, Email, Phone,
-  Event, Email consent, SMS consent (add CASL wording: who it's from + how to opt out / "reply STOP").
+  and Event (add CASL wording: who it's from + how to opt out / "reply STOP").
   Share the public form link with volunteers.
 - **Jack's dashboard** — build an **Interface** grouped by `Event` showing RSVP count vs Capacity
   and the roster. Share a **read-only** link with Jack.
@@ -128,8 +126,8 @@ python -m vibersvp.run --once --dry-run
 python -m vibersvp.run --once --dry-run --now 2026-07-01T17:00:00Z
 ```
 
-**End-to-end smoke test:** create a test event ~2h and ~24h out, RSVP yourself (your own email/phone,
-both consents on), run without `--dry-run`, confirm you receive the messages and that `ReminderLog`
+**End-to-end smoke test:** create a test event ~2h and ~24h out, RSVP yourself (your own email/phone),
+run without `--dry-run`, confirm you receive the messages and that `ReminderLog`
 rows appear — then run again and confirm **nothing re-sends**.
 
 ---
@@ -141,4 +139,5 @@ rows appear — then run again and confirm **nothing re-sends**.
 - Each reminder has a stable **key** (`rsvp::offset::channel`). Before sending, the worker checks
   the key against `ReminderLog`; after sending it writes the key back. So the job is **idempotent** —
   safe to run every 15 minutes and resilient to cron drift or a missed run.
-- Consent is honoured **per channel**; SMS is held outside local quiet hours (default 9 AM–9 PM).
+- A volunteer is reminded on every channel they have contact info for (email and/or phone);
+  SMS is held outside local quiet hours (default 9 AM–9 PM).

@@ -34,8 +34,6 @@ RSVP = Rsvp(
     email="pat@example.com",
     phone="+12505550123",
     event_id="evt1",
-    email_consent=True,
-    sms_consent=True,
     status="Going",
 )
 

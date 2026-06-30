@@ -40,8 +40,6 @@ def make_rsvp(**overrides) -> Rsvp:
         email="pat@example.com",
         phone="+12505550123",
         event_id="evt1",
-        email_consent=True,
-        sms_consent=True,
         status="Going",
     )
     base.update(overrides)
@@ -108,15 +106,15 @@ def test_non_going_rsvp_skipped():
     assert compute_due_reminders([make_event()], [rsvp], now, DEFAULT_OFFSETS) == []
 
 
-def test_consent_is_required_per_channel():
+def test_no_contact_info_gets_nothing():
     now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
-    rsvp = make_rsvp(email_consent=False, sms_consent=False)
+    rsvp = make_rsvp(email=None, phone=None)  # no way to reach this volunteer
     assert compute_due_reminders([make_event()], [rsvp], now, DEFAULT_OFFSETS) == []
 
 
 def test_missing_email_falls_back_to_sms_only():
     now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
-    rsvp = make_rsvp(email=None)  # consented to email but no address on file
+    rsvp = make_rsvp(email=None)  # no email address on file
     due = compute_due_reminders([make_event()], [rsvp], now, DEFAULT_OFFSETS)
     assert {d.channel for d in due} == {Channel.SMS}
 
@@ -124,7 +122,7 @@ def test_missing_email_falls_back_to_sms_only():
 def test_per_event_offset_override_wins():
     now = datetime(2026, 7, 1, 17, 30, tzinfo=UTC)  # 30 min before
     event = make_event(reminder_offsets=(Offset(60, "1h"),))
-    rsvp = make_rsvp(sms_consent=False)  # email only, to keep it to one record
+    rsvp = make_rsvp(phone=None)  # email only, to keep it to one record
     due = compute_due_reminders([event], [rsvp], now, DEFAULT_OFFSETS)
     assert [(d.offset.label, d.channel) for d in due] == [("1h", Channel.EMAIL)]
 

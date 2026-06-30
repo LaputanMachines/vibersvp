@@ -38,11 +38,11 @@ def parse_offsets(text: str) -> list[Offset]:
 
 
 def channels_for(rsvp: Rsvp) -> list[Channel]:
-    """Which channels this volunteer can be reached on, honouring per-channel consent."""
+    """Which channels this volunteer can be reached on, based on the contact info on file."""
     channels: list[Channel] = []
-    if rsvp.email and rsvp.email_consent:
+    if rsvp.email:
         channels.append(Channel.EMAIL)
-    if rsvp.phone and rsvp.sms_consent:
+    if rsvp.phone:
         channels.append(Channel.SMS)
     return channels
 

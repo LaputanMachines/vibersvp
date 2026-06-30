@@ -41,8 +41,6 @@ class Rsvp:
     email: str | None
     phone: str | None
     event_id: str | None
-    email_consent: bool
-    sms_consent: bool
     status: str
 
 
