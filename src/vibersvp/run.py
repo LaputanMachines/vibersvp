@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from .airtable import AirtableRepo
 from .config import Settings
 from .models import Channel
-from .scheduler import compute_due_reminders, within_sms_window
+from .scheduler import compute_due_reminders, events_to_complete, within_sms_window
 from .templates import MessageContext, render_email, render_sms
 
 logger = logging.getLogger("vibersvp")
@@ -54,11 +54,16 @@ def main(argv: list[str] | None = None) -> int:
     events = repo.load_events()
     rsvps = repo.load_rsvps()
     due = compute_due_reminders(events, rsvps, now, settings.default_offsets)
+    to_complete = events_to_complete(events, now)
     logger.info(
-        "now=%s | events=%d rsvps=%d due=%d | email=%s sms=%s dry_run=%s",
-        now.isoformat(), len(events), len(rsvps), len(due),
+        "now=%s | events=%d rsvps=%d due=%d complete=%d | email=%s sms=%s dry_run=%s",
+        now.isoformat(), len(events), len(rsvps), len(due), len(to_complete),
         settings.email_enabled, settings.sms_enabled, args.dry_run,
     )
+
+    # Flip finished events to Completed. Runs every tick, independent of reminders.
+    _complete_finished_events(repo, to_complete, args.dry_run)
+
     if not due:
         return 0
 
@@ -148,6 +153,19 @@ def _build_sms_notifier(settings: Settings):
         auth_token=settings.twilio_auth_token,
         from_number=settings.twilio_from_number,
     )
+
+
+def _complete_finished_events(repo, finished, dry_run):
+    """Mark events whose date has passed as Completed. Housekeeping — never blocks reminders."""
+    for event in finished:
+        if dry_run:
+            logger.info("WOULD COMPLETE event: %s (%s)", event.name, event.id)
+            continue
+        try:
+            repo.mark_event_completed(event.id)
+            logger.info("COMPLETED event: %s (%s)", event.name, event.id)
+        except Exception as exc:  # noqa: BLE001 — log and continue; a missed flip retries next run
+            logger.error("FAILED to complete event %s (%s): %s", event.name, event.id, exc)
 
 
 def _send(channel, event, rsvp, ctx, email_notifier, sms_notifier):

@@ -13,7 +13,7 @@ from pyairtable import Api
 
 from .config import Settings
 from .models import Channel, Event, Rsvp
-from .scheduler import parse_offsets
+from .scheduler import COMPLETED_STATUS, parse_offsets
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -109,3 +109,7 @@ class AirtableRepo:
                 "Error": error or "",
             }
         )
+
+    def mark_event_completed(self, event_id: str) -> None:
+        """Flip an event's Status to Completed — called once its date has passed."""
+        self._events.update(event_id, {"Status": COMPLETED_STATUS})

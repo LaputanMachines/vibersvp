@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from vibersvp.models import Channel, Event, Offset, Rsvp
 from vibersvp.scheduler import (
     compute_due_reminders,
+    events_to_complete,
     parse_offsets,
     within_sms_window,
 )
@@ -138,6 +139,41 @@ def test_idempotency_keys_are_distinct_and_stable():
     keys = [d.key for d in due]
     assert len(keys) == len(set(keys))  # no duplicates
     assert "rsvp1::24h::Email" in keys
+
+
+# --- events_to_complete ------------------------------------------------------
+
+def test_event_completed_after_end():
+    now = datetime(2026, 7, 1, 21, 0, tzinfo=UTC)
+    event = make_event(end=datetime(2026, 7, 1, 20, 0, tzinfo=UTC))
+    assert [e.id for e in events_to_complete([event], now)] == ["evt1"]
+
+
+def test_event_not_completed_before_end():
+    now = datetime(2026, 7, 1, 19, 0, tzinfo=UTC)  # past start, before end
+    event = make_event(end=datetime(2026, 7, 1, 20, 0, tzinfo=UTC))
+    assert events_to_complete([event], now) == []
+
+
+def test_event_completion_falls_back_to_start_when_no_end():
+    now = datetime(2026, 7, 1, 18, 30, tzinfo=UTC)  # after start, no end set
+    assert [e.id for e in events_to_complete([make_event()], now)] == ["evt1"]
+
+
+def test_event_not_completed_before_start():
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)  # before start, no end
+    assert events_to_complete([make_event()], now) == []
+
+
+def test_only_open_events_are_completed():
+    now = datetime(2026, 7, 2, 0, 0, tzinfo=UTC)  # well past the event
+    for status in ("Draft", "Cancelled", "Completed"):
+        assert events_to_complete([make_event(status=status)], now) == []
+
+
+def test_event_without_dates_is_never_completed():
+    now = datetime(2026, 7, 2, 0, 0, tzinfo=UTC)
+    assert events_to_complete([make_event(start=None, end=None)], now) == []
 
 
 # --- within_sms_window -------------------------------------------------------

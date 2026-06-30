@@ -28,7 +28,7 @@ Create a base (any name) with three tables. Field names must match exactly.
 | `Start` | Date **with time** | the shift start; set a sensible time zone |
 | `End` | Date with time | optional |
 | `Location` | Single line text | |
-| `Status` | Single select | `Draft`, `Open`, `Cancelled`, `Completed` — reminders only fire for `Open` |
+| `Status` | Single select | `Draft`, `Open`, `Cancelled`, `Completed` — reminders only fire for `Open`; the worker auto-sets `Completed` once an event is over |
 | `Reminder offsets` | Single line text | optional override, e.g. `24h,2h`; blank = use the default |
 | `Notes` | Long text | optional; included in the reminder |
 
@@ -140,3 +140,6 @@ rows appear — then run again and confirm **nothing re-sends**.
   safe to run every 15 minutes and resilient to cron drift or a missed run.
 - A volunteer is reminded on every channel they have contact info for (email and/or phone);
   SMS is held outside local quiet hours (default 9 AM–9 PM).
+- After an event is over, the worker flips its `Status` from `Open` to `Completed` (using `End`
+  if set, otherwise `Start`), so the dashboard reflects what's done. `Draft`, `Cancelled`, and
+  already-`Completed` events are left untouched.

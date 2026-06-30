@@ -15,7 +15,9 @@ from zoneinfo import ZoneInfo
 from .models import Channel, DueReminder, Event, Offset, Rsvp
 
 # Events only get reminders while they're live and accepting volunteers.
-ACTIVE_EVENT_STATUSES = frozenset({"Open"})
+OPEN_STATUS = "Open"
+COMPLETED_STATUS = "Completed"
+ACTIVE_EVENT_STATUSES = frozenset({OPEN_STATUS})
 GOING_STATUS = "Going"
 
 _OFFSET_RE = re.compile(r"^\s*(\d+)\s*([mhd])\s*$", re.IGNORECASE)
@@ -90,3 +92,21 @@ def within_sms_window(now: datetime, tz: ZoneInfo, start_hour: int, end_hour: in
     """True if `now` (converted to local time) is inside the allowed SMS hours [start, end)."""
     local_hour = now.astimezone(tz).hour
     return start_hour <= local_hour < end_hour
+
+
+def events_to_complete(events: list[Event], now: datetime) -> list[Event]:
+    """Open events that are over and should be flipped to Completed.
+
+    "Over" means the event's end time has passed — or its start, if no end is set.
+    Only Open events transition; Draft/Cancelled/Completed are left as-is, and an event
+    with no dates at all is never auto-completed. Naturally idempotent: once an event is
+    Completed it's no longer Open, so it's never reconsidered.
+    """
+    finished: list[Event] = []
+    for event in events:
+        if event.status != OPEN_STATUS:
+            continue
+        ended = event.end or event.start
+        if ended is not None and now >= ended:
+            finished.append(event)
+    return finished
