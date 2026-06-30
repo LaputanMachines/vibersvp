@@ -39,7 +39,7 @@ Create a base (any name) with three tables. Field names must match exactly.
 | `Email` | Email | |
 | `Phone` | Phone number | E.164 ideally, e.g. `+12505550123` |
 | `Event` | Link to `Events` | |
-| `Status` | Single select | `Going`, `Cancelled`, `Waitlist` — only `Going` gets reminders |
+| `Status` | Single select | `Going`, `Not Going` — only `Going` gets reminders |
 | `Created` | Created time | optional |
 
 ### `ReminderLog` (written by the worker — don't edit by hand)

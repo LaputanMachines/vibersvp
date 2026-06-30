@@ -101,7 +101,7 @@ def test_inactive_event_skipped():
 
 def test_non_going_rsvp_skipped():
     now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
-    rsvp = make_rsvp(status="Cancelled")
+    rsvp = make_rsvp(status="Not Going")
     assert compute_due_reminders([make_event()], [rsvp], now, DEFAULT_OFFSETS) == []
 
 
