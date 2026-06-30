@@ -27,7 +27,6 @@ class Event:
     start: datetime | None  # tz-aware (UTC); None if the Airtable row has no Start
     end: datetime | None
     location: str
-    capacity: int | None
     status: str
     # Per-event override of the reminder schedule; None means "use the config default".
     reminder_offsets: tuple[Offset, ...] | None

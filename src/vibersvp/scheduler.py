@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from .models import Channel, DueReminder, Event, Offset, Rsvp
 
 # Events only get reminders while they're live and accepting volunteers.
-ACTIVE_EVENT_STATUSES = frozenset({"Open", "Full"})
+ACTIVE_EVENT_STATUSES = frozenset({"Open"})
 GOING_STATUS = "Going"
 
 _OFFSET_RE = re.compile(r"^\s*(\d+)\s*([mhd])\s*$", re.IGNORECASE)

@@ -24,7 +24,6 @@ def make_event(**overrides) -> Event:
         start=EVENT_START,
         end=None,
         location="1234 Gladstone Ave",
-        capacity=10,
         status="Open",
         reminder_offsets=None,
         notes="",

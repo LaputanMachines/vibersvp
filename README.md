@@ -28,8 +28,7 @@ Create a base (any name) with three tables. Field names must match exactly.
 | `Start` | Date **with time** | the shift start; set a sensible time zone |
 | `End` | Date with time | optional |
 | `Location` | Single line text | |
-| `Capacity` | Number | optional |
-| `Status` | Single select | `Draft`, `Open`, `Full`, `Cancelled`, `Completed` — reminders only fire for `Open`/`Full` |
+| `Status` | Single select | `Draft`, `Open`, `Cancelled`, `Completed` — reminders only fire for `Open` |
 | `Reminder offsets` | Single line text | optional override, e.g. `24h,2h`; blank = use the default |
 | `Notes` | Long text | optional; included in the reminder |
 
@@ -60,7 +59,7 @@ Create a base (any name) with three tables. Field names must match exactly.
 - **RSVP form** — on the `RSVPs` table, create a **Form** view exposing Name, Email, Phone,
   and Event (add CASL wording: who it's from + how to opt out / "reply STOP").
   Share the public form link with volunteers.
-- **Jack's dashboard** — build an **Interface** grouped by `Event` showing RSVP count vs Capacity
+- **Jack's dashboard** — build an **Interface** grouped by `Event` showing the RSVP count
   and the roster. Share a **read-only** link with Jack.
 
 Create a **Personal Access Token** (Airtable → Builder hub → Personal access tokens) with

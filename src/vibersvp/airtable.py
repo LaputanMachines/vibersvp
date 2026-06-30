@@ -63,7 +63,6 @@ class AirtableRepo:
             start=_parse_dt(f.get("Start")),
             end=_parse_dt(f.get("End")),
             location=f.get("Location", ""),
-            capacity=f.get("Capacity"),
             status=f.get("Status", ""),
             reminder_offsets=tuple(parsed) if parsed else None,
             notes=f.get("Notes", ""),

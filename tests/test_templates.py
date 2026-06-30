@@ -22,7 +22,6 @@ EVENT = Event(
     start=datetime(2026, 7, 1, 18, 0, tzinfo=UTC),  # 11:00 AM PDT
     end=None,
     location="1234 Gladstone Ave",
-    capacity=10,
     status="Open",
     reminder_offsets=None,
     notes="Wear comfortable shoes.",
