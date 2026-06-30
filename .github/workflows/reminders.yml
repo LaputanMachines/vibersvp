@@ -1,0 +1,49 @@
+name: Send RSVP reminders
+
+on:
+  schedule:
+    # Every 15 minutes (UTC). GitHub cron is best-effort and drifts 5–30 min;
+    # the worker is idempotent and window-based, so drift is harmless.
+    # If this repo is PRIVATE, widen this (e.g. "*/30 * * * *") to stay within free minutes.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}  # lets you trigger a run by hand from the Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reminders
+  cancel-in-progress: false  # never interrupt an in-flight send
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Send due reminders
+        run: python -m vibersvp.run --once
+        env:
+          AIRTABLE_API_TOKEN: ${{ secrets.AIRTABLE_API_TOKEN }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_FROM_NAME: ${{ vars.EMAIL_FROM_NAME }}
+          EMAIL_REPLY_TO: ${{ secrets.EMAIL_REPLY_TO }}
+          # Leave the three Twilio secrets unset until the number is verified — SMS is skipped.
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          DEFAULT_REMINDER_OFFSETS: ${{ vars.DEFAULT_REMINDER_OFFSETS }}
+          TIMEZONE: ${{ vars.TIMEZONE }}
+          CAMPAIGN_NAME: ${{ vars.CAMPAIGN_NAME }}
+          CAMPAIGN_CONTACT: ${{ vars.CAMPAIGN_CONTACT }}
