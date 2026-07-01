@@ -56,7 +56,7 @@
 
   <!-- Campaign chip -->
   <g>
-    <rect x="270" y="250" width="332" height="44" rx="22" fill="#FFFFFF" fill-opacity="0.14"/>
+    <rect x="270" y="250" width="424" height="44" rx="22" fill="#FFFFFF" fill-opacity="0.14"/>
     <circle cx="296" cy="272" r="7" fill="#FACC15"/>
     <text x="314" y="279" class="chip" font-size="21" fill="#FFFFFF">JACK SANDOR FOR VICTORIA</text>
   </g>
