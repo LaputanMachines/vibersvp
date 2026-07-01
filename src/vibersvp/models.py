@@ -17,7 +17,10 @@ class Offset:
     """A reminder lead time, e.g. 2 hours before an event."""
 
     minutes: int
-    label: str  # the original token ("24h", "2h", "30m") — used in the idempotency key
+    label: str  # the duration token ("24h", "2h", "30m") — used in the idempotency key
+    # Which channels this offset sends on. None means "every channel the volunteer has
+    # contact info for"; a tuple restricts it (e.g. (Channel.SMS,) for a text-only nudge).
+    channels: tuple["Channel", ...] | None = None
 
 
 @dataclass(frozen=True)

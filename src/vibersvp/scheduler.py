@@ -28,12 +28,19 @@ COMPLETED_STATUS = "Completed"
 ACTIVE_EVENT_STATUSES = frozenset({OPEN_STATUS})
 GOING_STATUS = "Going"
 
-_OFFSET_RE = re.compile(r"^\s*(\d+)\s*([mhd])\s*$", re.IGNORECASE)
+# A token is "<n><unit>" with an optional ":<channel>" suffix, e.g. "24h" or "2h:sms".
+_OFFSET_RE = re.compile(r"^\s*(\d+)\s*([mhd])\s*(?::\s*(email|sms)\s*)?$", re.IGNORECASE)
 _UNIT_MINUTES = {"m": 1, "h": 60, "d": 60 * 24}
+_CHANNEL_BY_TOKEN = {"email": Channel.EMAIL, "sms": Channel.SMS}
 
 
 def parse_offsets(text: str) -> list[Offset]:
-    """'24h,2h' -> [Offset(1440,'24h'), Offset(120,'2h')]. Bad tokens are skipped."""
+    """'24h,2h:sms' -> [Offset(1440,'24h'), Offset(120,'2h',(SMS,))]. Bad tokens are skipped.
+
+    A bare token ("24h") sends on every channel the volunteer has contact info for; a
+    ":email"/":sms" suffix pins that offset to one channel (e.g. "2h:sms" = text-only).
+    The label keeps just the duration, so idempotency keys are unchanged by the suffix.
+    """
     offsets: list[Offset] = []
     for raw in (text or "").split(","):
         token = raw.strip()
@@ -42,19 +49,24 @@ def parse_offsets(text: str) -> list[Offset]:
         m = _OFFSET_RE.match(token)
         if not m:
             continue
-        value, unit = int(m.group(1)), m.group(2).lower()
-        offsets.append(Offset(minutes=value * _UNIT_MINUTES[unit], label=token))
+        value, unit, channel_token = int(m.group(1)), m.group(2).lower(), m.group(3)
+        channels = (_CHANNEL_BY_TOKEN[channel_token.lower()],) if channel_token else None
+        label = token.split(":", 1)[0].strip()
+        offsets.append(Offset(minutes=value * _UNIT_MINUTES[unit], label=label, channels=channels))
     return offsets
 
 
-def channels_for(rsvp: Rsvp) -> list[Channel]:
-    """Which channels this volunteer can be reached on, based on the contact info on file."""
-    channels: list[Channel] = []
+def channels_for(rsvp: Rsvp, offset: Offset) -> list[Channel]:
+    """Channels to send this offset on: the volunteer's reachable channels, narrowed to the
+    offset's allow-list when it has one (e.g. a text-only "2h:sms" reminder)."""
+    available: list[Channel] = []
     if rsvp.email:
-        channels.append(Channel.EMAIL)
+        available.append(Channel.EMAIL)
     if rsvp.phone:
-        channels.append(Channel.SMS)
-    return channels
+        available.append(Channel.SMS)
+    if offset.channels is None:
+        return available
+    return [channel for channel in available if channel in offset.channels]
 
 
 def compute_due_reminders(
@@ -91,7 +103,7 @@ def compute_due_reminders(
             if not (send_at <= now < event.start):
                 continue
             for rsvp in attendees:
-                for channel in channels_for(rsvp):
+                for channel in channels_for(rsvp, offset):
                     due.append(DueReminder(rsvp=rsvp, event=event, offset=offset, channel=channel))
     return due
 

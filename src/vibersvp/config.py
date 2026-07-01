@@ -50,7 +50,8 @@ class Settings(BaseSettings):
     new_rsvp_lookback: str = "24h"
 
     # --- Behaviour ---
-    default_reminder_offsets: str = "24h,2h"
+    # "2h:sms" makes the 2h nudge text-only; the 24h reminder still goes on email + SMS.
+    default_reminder_offsets: str = "24h,2h:sms"
     timezone: str = "America/Vancouver"
     campaign_name: str = "Jack Sandor for Victoria"
     campaign_contact: str = "the campaign team"

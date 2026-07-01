@@ -1,4 +1,4 @@
-# VibeRSVP - Volunteer Management Tool# vibersvp
+# VibeRSVP - Volunteer Management Tool
 
 RSVP + reminder tool for canvassing volunteer shifts on the **Jack Sandor for Victoria** campaign.
 
@@ -29,7 +29,7 @@ Create a base (any name) with three tables. Field names must match exactly.
 | `End` | Date with time | optional |
 | `Location` | Single line text | |
 | `Status` | Single select | `Draft`, `Open`, `Cancelled`, `Completed` — reminders only fire for `Open`; the worker auto-sets `Completed` once an event is over |
-| `Reminder offsets` | Single line text | optional override, e.g. `24h,2h`; blank = use the default |
+| `Reminder offsets` | Single line text | optional override, e.g. `24h,2h:sms`; blank = use the default. Add `:email`/`:sms` to pin an offset to one channel |
 | `Notes` | Long text | optional; included in the reminder |
 
 ### `RSVPs` (this is the form's table)
@@ -155,8 +155,11 @@ rows appear — then run again and confirm **nothing re-sends**.
 - Each reminder has a stable **key** (`rsvp::offset::channel`). Before sending, the worker checks
   the key against `ReminderLog`; after sending it writes the key back. So the job is **idempotent** —
   safe to run every 15 minutes and resilient to cron drift or a missed run.
-- A volunteer is reminded on every channel they have contact info for (email and/or phone);
-  SMS is held outside local quiet hours (default 9 AM–9 PM).
+- Each offset picks its own channels: a bare offset (`24h`) reminds on every channel the
+  volunteer has contact info for, while a suffixed one (`2h:sms`) pins to one. The default
+  `24h,2h:sms` sends the 24h reminder on email + SMS and the 2h nudge as text only.
+- SMS is held outside local quiet hours (default 9 AM–9 PM); a deferred text is picked up by a
+  later run still inside the send window.
 - When someone RSVPs `Going`, the organizer gets a one-time text (`JACK_PHONE`), deduped through
   the same `ReminderLog` key mechanism and scoped to recent RSVPs by `NEW_RSVP_LOOKBACK`.
 - After an event is over, the worker flips its `Status` from `Open` to `Completed` (using `End`

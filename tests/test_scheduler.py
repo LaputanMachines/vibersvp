@@ -64,6 +64,19 @@ def test_parse_offsets_skips_garbage_and_blanks():
     assert parse_offsets("2h,,nonsense,5x") == [Offset(120, "2h")]
 
 
+def test_parse_offsets_channel_suffix():
+    parsed = parse_offsets("24h,2h:sms,30m:email")
+    assert parsed == [
+        Offset(1440, "24h", None),               # bare = every available channel
+        Offset(120, "2h", (Channel.SMS,)),        # text-only nudge
+        Offset(30, "30m", (Channel.EMAIL,)),      # label drops the suffix
+    ]
+
+
+def test_parse_offsets_rejects_unknown_channel_suffix():
+    assert parse_offsets("2h:carrierpigeon") == []
+
+
 # --- compute_due_reminders ---------------------------------------------------
 
 def test_both_offsets_due_one_hour_before():
@@ -77,6 +90,24 @@ def test_both_offsets_due_one_hour_before():
         ("2h", Channel.EMAIL),
         ("2h", Channel.SMS),
     }
+
+
+def test_offset_channel_suffix_routes_2h_to_sms_only():
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)  # both 24h and 2h windows open
+    offsets = parse_offsets("24h,2h:sms")  # the campaign default
+    due = compute_due_reminders([make_event()], [make_rsvp()], now, offsets)
+    assert {(d.offset.label, d.channel) for d in due} == {
+        ("24h", Channel.EMAIL),
+        ("24h", Channel.SMS),
+        ("2h", Channel.SMS),  # no ("2h", Channel.EMAIL) — the 2h email is gone
+    }
+
+
+def test_sms_pinned_offset_skipped_when_volunteer_has_no_phone():
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
+    offsets = parse_offsets("2h:sms")
+    rsvp = make_rsvp(phone=None)  # email only, but this offset is text-only
+    assert compute_due_reminders([make_event()], [rsvp], now, offsets) == []
 
 
 def test_only_earlier_offset_due():
