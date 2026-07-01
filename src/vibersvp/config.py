@@ -10,10 +10,13 @@ from datetime import timedelta
 from functools import cached_property
 from zoneinfo import ZoneInfo
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .models import Offset
 from .scheduler import parse_offsets
+
+DEFAULT_TIMEZONE = "America/Vancouver"
 
 
 class Settings(BaseSettings):
@@ -52,11 +55,20 @@ class Settings(BaseSettings):
     # --- Behaviour ---
     # "2h:sms" makes the 2h nudge text-only; the 24h reminder still goes on email + SMS.
     default_reminder_offsets: str = "24h,2h:sms"
-    timezone: str = "America/Vancouver"
+    timezone: str = DEFAULT_TIMEZONE
     campaign_name: str = "Jack Sandor for Victoria"
     campaign_contact: str = "the campaign team"
     sms_quiet_start_hour: int = 9
     sms_quiet_end_hour: int = 21
+
+    @field_validator("timezone", mode="before")
+    @classmethod
+    def _default_blank_timezone(cls, v: object) -> object:
+        """A set-but-empty TIMEZONE env var overrides the field default with "",
+        which then crashes ZoneInfo(""). Treat blank/whitespace as unset."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return DEFAULT_TIMEZONE
+        return v.strip() if isinstance(v, str) else v
 
     @property
     def email_enabled(self) -> bool:
