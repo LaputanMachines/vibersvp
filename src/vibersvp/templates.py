@@ -48,7 +48,7 @@ def render_email(event: Event, rsvp: Rsvp, ctx: MessageContext) -> EmailContent:
 
     text = (
         f"Hi {_first_name(rsvp.name)},\n\n"
-        f"This is a reminder that you signed up to canvass with the "
+        f"This is a reminder that you signed up to volunteer with the "
         f"{ctx.campaign_name} campaign:\n\n"
         f"  Event:    {event.name}\n"
         f"  When:     {when}\n"
@@ -64,7 +64,7 @@ def render_email(event: Event, rsvp: Rsvp, ctx: MessageContext) -> EmailContent:
     notes_html = f"<p><strong>Notes:</strong> {event.notes}</p>" if event.notes else ""
     html = (
         f"<p>Hi {_first_name(rsvp.name)},</p>"
-        f"<p>This is a reminder that you signed up to canvass with the "
+        f"<p>This is a reminder that you signed up to volunteer with the "
         f"<strong>{ctx.campaign_name}</strong> campaign:</p>"
         f"<ul>"
         f"<li><strong>Event:</strong> {event.name}</li>"
@@ -86,6 +86,6 @@ def render_sms(event: Event, rsvp: Rsvp, ctx: MessageContext) -> str:
     when = _format_when(event, ctx.tz)
     where = event.location or "see email for details"
     return (
-        f"{ctx.campaign_name}: Reminder — you're canvassing at {event.name}, "
-        f"{when}, {where}. Reply STOP to opt out."
+        f"{ctx.campaign_name}: Reminder — you've signed up to volunteer with Jack Sandor at "
+        f"{when}, {where}. Looking forward to seeing you! Reply STOP to opt out."
     )
