@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" width="1280" height="360" role="img" aria-label="vibersvp — RSVP and reminders for canvassing volunteer shifts">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0F766E"/>
+      <stop offset="0.55" stop-color="#0E7490"/>
+      <stop offset="1" stop-color="#0C4A6E"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E6FFFA"/>
+    </linearGradient>
+    <clipPath id="card">
+      <rect x="0" y="0" width="1280" height="360" rx="28"/>
+    </clipPath>
+    <style>
+      .wm   { font-family: "Helvetica Neue", Arial, "DejaVu Sans", sans-serif; font-weight: 800; }
+      .tag  { font-family: "Helvetica Neue", Arial, "DejaVu Sans", sans-serif; font-weight: 400; }
+      .chip { font-family: "Helvetica Neue", Arial, "DejaVu Sans", sans-serif; font-weight: 600; letter-spacing: 0.6px; }
+    </style>
+  </defs>
+
+  <!-- Card -->
+  <rect x="0" y="0" width="1280" height="360" rx="28" fill="url(#bg)"/>
+
+  <!-- Decorative "signal" rings + dots, clipped to the card -->
+  <g clip-path="url(#card)" fill="none" stroke="#FFFFFF">
+    <g opacity="0.10" stroke-width="2">
+      <circle cx="1170" cy="150" r="80"/>
+      <circle cx="1170" cy="150" r="150"/>
+      <circle cx="1170" cy="150" r="230"/>
+      <circle cx="1170" cy="150" r="310"/>
+    </g>
+    <g fill="#FFFFFF" stroke="none" opacity="0.14">
+      <circle cx="1015" cy="70" r="5"/>
+      <circle cx="1110" cy="300" r="6"/>
+      <circle cx="960" cy="250" r="4"/>
+    </g>
+  </g>
+
+  <!-- Icon badge: a message bubble with a checkmark (an RSVP, confirmed + sent) -->
+  <g>
+    <circle cx="150" cy="180" r="80" fill="url(#badge)"/>
+    <circle cx="150" cy="180" r="80" fill="none" stroke="#FFFFFF" stroke-opacity="0.5" stroke-width="2"/>
+    <g>
+      <rect x="106" y="140" width="88" height="62" rx="16" fill="#0F766E"/>
+      <path d="M128 200 L128 224 L152 200 Z" fill="#0F766E"/>
+      <polyline points="124,171 143,189 178,153" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <!-- little amber "notification" pip -->
+    <circle cx="196" cy="132" r="12" fill="#FACC15"/>
+  </g>
+
+  <!-- Wordmark + tagline -->
+  <text x="266" y="176" class="wm" font-size="92" fill="#FFFFFF">vibersvp</text>
+  <text x="270" y="224" class="tag" font-size="27" fill="#FFFFFF" fill-opacity="0.92">RSVP + reminders for canvassing volunteer shifts</text>
+
+  <!-- Campaign chip -->
+  <g>
+    <rect x="270" y="250" width="332" height="44" rx="22" fill="#FFFFFF" fill-opacity="0.14"/>
+    <circle cx="296" cy="272" r="7" fill="#FACC15"/>
+    <text x="314" y="279" class="chip" font-size="21" fill="#FFFFFF">JACK SANDOR FOR VICTORIA</text>
+  </g>
+</svg>

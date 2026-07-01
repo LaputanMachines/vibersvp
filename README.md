@@ -1,4 +1,8 @@
-# VibeRSVP - Volunteer Management Tool
+<p align="center">
+  <img src="assets/banner.png" alt="vibersvp — RSVP + reminders for canvassing volunteer shifts" width="820">
+</p>
+
+# vibersvp
 
 RSVP + reminder tool for canvassing volunteer shifts on the **Jack Sandor for Victoria** campaign.
 
