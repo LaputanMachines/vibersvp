@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from vibersvp.models import Channel, Event, Offset, Rsvp
+from vibersvp.models import Channel, Event, Offset, Rsvp, new_rsvp_alert_key
 from vibersvp.scheduler import (
     compute_due_reminders,
+    compute_new_rsvp_alerts,
     events_to_complete,
     parse_offsets,
     within_sms_window,
@@ -174,6 +175,56 @@ def test_only_open_events_are_completed():
 def test_event_without_dates_is_never_completed():
     now = datetime(2026, 7, 2, 0, 0, tzinfo=UTC)
     assert events_to_complete([make_event(start=None, end=None)], now) == []
+
+
+# --- compute_new_rsvp_alerts -------------------------------------------------
+
+LOOKBACK = timedelta(hours=24)
+NOW = datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
+
+
+def test_new_going_rsvp_within_lookback_alerts():
+    rsvp = make_rsvp(created=NOW - timedelta(minutes=10))
+    alerts = compute_new_rsvp_alerts([rsvp], [make_event()], NOW, LOOKBACK, set())
+    assert len(alerts) == 1
+    assert alerts[0].rsvp.id == "rsvp1"
+    assert alerts[0].event.id == "evt1"  # event resolved from the RSVP's link
+    assert alerts[0].key == "rsvp1::new-rsvp::SMS"
+
+
+def test_alert_skipped_when_already_sent():
+    rsvp = make_rsvp(created=NOW - timedelta(minutes=10))
+    already = {new_rsvp_alert_key("rsvp1")}
+    assert compute_new_rsvp_alerts([rsvp], [make_event()], NOW, LOOKBACK, already) == []
+
+
+def test_not_going_rsvp_never_alerts():
+    rsvp = make_rsvp(status="Not Going", created=NOW - timedelta(minutes=10))
+    assert compute_new_rsvp_alerts([rsvp], [make_event()], NOW, LOOKBACK, set()) == []
+
+
+def test_old_rsvp_outside_lookback_is_not_new():
+    rsvp = make_rsvp(created=NOW - timedelta(hours=25))  # just past the 24h window
+    assert compute_new_rsvp_alerts([rsvp], [make_event()], NOW, LOOKBACK, set()) == []
+
+
+def test_rsvp_without_created_timestamp_is_skipped():
+    rsvp = make_rsvp(created=None)  # can't place it in time → not treated as new
+    assert compute_new_rsvp_alerts([rsvp], [make_event()], NOW, LOOKBACK, set()) == []
+
+
+def test_alert_still_fires_when_event_link_missing():
+    rsvp = make_rsvp(event_id=None, created=NOW - timedelta(minutes=5))
+    alerts = compute_new_rsvp_alerts([rsvp], [make_event()], NOW, LOOKBACK, set())
+    assert len(alerts) == 1
+    assert alerts[0].event is None
+
+
+def test_alert_key_is_stable_and_distinct_from_reminder_keys():
+    key = new_rsvp_alert_key("rsvp1")
+    assert key == "rsvp1::new-rsvp::SMS"
+    # never collides with a reminder key, whose middle segment is an offset label
+    assert key not in {"rsvp1::24h::SMS", "rsvp1::2h::Email"}
 
 
 # --- within_sms_window -------------------------------------------------------

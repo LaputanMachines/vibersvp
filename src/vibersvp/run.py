@@ -18,9 +18,14 @@ from datetime import datetime, timezone
 
 from .airtable import AirtableRepo
 from .config import Settings
-from .models import Channel
-from .scheduler import compute_due_reminders, events_to_complete, within_sms_window
-from .templates import MessageContext, render_email, render_sms
+from .models import NEW_RSVP_OFFSET_LABEL, Channel
+from .scheduler import (
+    compute_due_reminders,
+    compute_new_rsvp_alerts,
+    events_to_complete,
+    within_sms_window,
+)
+from .templates import MessageContext, render_email, render_new_rsvp_alert, render_sms
 
 logger = logging.getLogger("vibersvp")
 
@@ -56,15 +61,17 @@ def main(argv: list[str] | None = None) -> int:
     due = compute_due_reminders(events, rsvps, now, settings.default_offsets)
     to_complete = events_to_complete(events, now)
     logger.info(
-        "now=%s | events=%d rsvps=%d due=%d complete=%d | email=%s sms=%s dry_run=%s",
+        "now=%s | events=%d rsvps=%d due=%d complete=%d | email=%s sms=%s rsvp_alerts=%s dry_run=%s",
         now.isoformat(), len(events), len(rsvps), len(due), len(to_complete),
-        settings.email_enabled, settings.sms_enabled, args.dry_run,
+        settings.email_enabled, settings.sms_enabled, settings.new_rsvp_alerts_enabled, args.dry_run,
     )
 
     # Flip finished events to Completed. Runs every tick, independent of reminders.
     _complete_finished_events(repo, to_complete, args.dry_run)
 
-    if not due:
+    # Bail only when there's nothing left that could send: no due reminders and the
+    # organizer alerts are off. (When alerts are on we must still scan for new RSVPs.)
+    if not due and not settings.new_rsvp_alerts_enabled:
         return 0
 
     sent_keys: set[str] = set() if args.dry_run else repo.load_sent_keys()
@@ -72,7 +79,18 @@ def main(argv: list[str] | None = None) -> int:
     sms_notifier = _build_sms_notifier(settings)
     ctx = MessageContext(settings.campaign_name, settings.campaign_contact, settings.tz)
 
-    counts = {"sent": 0, "would_send": 0, "dup": 0, "quiet": 0, "unconfigured": 0, "failed": 0}
+    counts = {
+        "sent": 0, "would_send": 0, "dup": 0, "quiet": 0, "unconfigured": 0, "failed": 0,
+        "alerted": 0, "alert_dup": 0, "would_alert": 0,
+    }
+
+    # Text the organizer about brand-new "Going" RSVPs. Operational and low-volume, so
+    # (unlike volunteer reminders) it's sent right away, ignoring the SMS quiet-hours window.
+    if settings.new_rsvp_alerts_enabled:
+        alerts = compute_new_rsvp_alerts(
+            rsvps, events, now, settings.new_rsvp_lookback_delta, sent_keys
+        )
+        _alert_new_rsvps(repo, settings, alerts, sms_notifier, ctx, now, sent_keys, args.dry_run, counts)
 
     for reminder in due:
         key = reminder.key
@@ -166,6 +184,43 @@ def _complete_finished_events(repo, finished, dry_run):
             logger.info("COMPLETED event: %s (%s)", event.name, event.id)
         except Exception as exc:  # noqa: BLE001 — log and continue; a missed flip retries next run
             logger.error("FAILED to complete event %s (%s): %s", event.name, event.id, exc)
+
+
+def _alert_new_rsvps(repo, settings, alerts, sms_notifier, ctx, now, sent_keys, dry_run, counts):
+    """Text the organizer once per fresh 'Going' RSVP. Idempotent via ReminderLog."""
+    for alert in alerts:
+        key = alert.key
+        if key in sent_keys:
+            counts["alert_dup"] += 1
+            continue
+
+        rsvp, event = alert.rsvp, alert.event
+        if dry_run:
+            logger.info("WOULD ALERT %s: new RSVP %s (%s)",
+                        settings.jack_phone, rsvp.name, event.name if event else "no event")
+            counts["would_alert"] += 1
+            continue
+
+        body = render_new_rsvp_alert(rsvp, event, ctx)
+        result = sms_notifier.send_sms(to=settings.jack_phone, text=body)
+        repo.log_reminder(
+            key=key,
+            rsvp_id=rsvp.id,
+            event_id=event.id if event else None,
+            offset_label=NEW_RSVP_OFFSET_LABEL,
+            channel=Channel.SMS,
+            status="Sent" if result.ok else "Failed",
+            sent_at=now,
+            provider_message_id=result.message_id,
+            error=result.error,
+        )
+        if result.ok:
+            sent_keys.add(key)  # guard against a duplicate within this same run
+            counts["alerted"] += 1
+            logger.info("ALERTED organizer: new RSVP %s msg_id=%s", rsvp.name, result.message_id)
+        else:
+            counts["failed"] += 1
+            logger.error("FAILED to alert organizer about RSVP %s: %s", rsvp.name, result.error)
 
 
 def _send(channel, event, rsvp, ctx, email_notifier, sms_notifier):

@@ -1,4 +1,4 @@
-# vibersvp
+# VibeRSVP - Volunteer Management Tool# vibersvp
 
 RSVP + reminder tool for canvassing volunteer shifts on the **Jack Sandor for Victoria** campaign.
 
@@ -40,7 +40,7 @@ Create a base (any name) with three tables. Field names must match exactly.
 | `Phone` | Phone number | E.164 ideally, e.g. `+12505550123` |
 | `Event` | Link to `Events` | |
 | `Status` | Single select | `Going`, `Not Going` — only `Going` gets reminders |
-| `Created` | Created time | optional |
+| `Created` | Created time | required for **new-RSVP alerts** (below); otherwise optional |
 
 ### `ReminderLog` (written by the worker — don't edit by hand)
 | Field | Type |
@@ -87,9 +87,10 @@ The workflow is `.github/workflows/reminders.yml` — runs `python -m vibersvp.r
    free monthly minutes.
 3. In **Settings → Secrets and variables → Actions**, add:
    - **Secrets:** `AIRTABLE_API_TOKEN`, `AIRTABLE_BASE_ID`, `RESEND_API_KEY`, `EMAIL_FROM`,
-     `EMAIL_REPLY_TO`, and (later) `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`.
+     `EMAIL_REPLY_TO`, and (later) `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`,
+     `JACK_PHONE` (for new-RSVP alerts — see below).
    - **Variables:** `CAMPAIGN_NAME`, `CAMPAIGN_CONTACT`, `TIMEZONE`, `DEFAULT_REMINDER_OFFSETS`,
-     `EMAIL_FROM_NAME`.
+     `EMAIL_FROM_NAME`, `NEW_RSVP_LOOKBACK` (optional; defaults to `24h`).
 4. Trigger a manual run from the **Actions** tab (`workflow_dispatch`) to test, then let the
    schedule take over.
 
@@ -106,6 +107,22 @@ Sending SMS to Canadian numbers requires a Twilio number that has passed **toll-
 or **A2P 10DLC** registration (needs the campaign's Canadian Business Number; review takes
 days–weeks). Until then, keep the Twilio vars unset and run email-only. When approved, add the
 three Twilio secrets — no code change needed.
+
+### New-RSVP alerts (text Jack when someone signs up)
+When a volunteer RSVPs **`Going`**, the worker texts the organizer once. Set the `JACK_PHONE`
+secret to the cell to notify (E.164, e.g. `+12505550123`). Requires Twilio to be configured (the
+three vars above) — without it, the alert is skipped just like reminders.
+
+- **Exactly once per RSVP.** The alert reuses the `ReminderLog` idempotency: it writes a row with
+  `Offset = new-rsvp`, `Channel = SMS`, so re-running the cron never re-texts.
+- **First-deploy guard.** Only RSVPs whose `Created` time is within `NEW_RSVP_LOOKBACK` (default
+  `24h`) count as "new", so turning this on doesn't blast the organizer about your existing RSVP
+  back-catalogue. This is why the `Created` field on the `RSVPs` table is **required** for this
+  feature — RSVPs with no `Created` value are skipped.
+- **No quiet hours.** Unlike volunteer reminders, these operational alerts to the organizer's own
+  number send immediately, day or night.
+
+To disable, leave `JACK_PHONE` unset.
 
 ---
 
@@ -140,6 +157,8 @@ rows appear — then run again and confirm **nothing re-sends**.
   safe to run every 15 minutes and resilient to cron drift or a missed run.
 - A volunteer is reminded on every channel they have contact info for (email and/or phone);
   SMS is held outside local quiet hours (default 9 AM–9 PM).
+- When someone RSVPs `Going`, the organizer gets a one-time text (`JACK_PHONE`), deduped through
+  the same `ReminderLog` key mechanism and scoped to recent RSVPs by `NEW_RSVP_LOOKBACK`.
 - After an event is over, the worker flips its `Status` from `Open` to `Completed` (using `End`
   if set, otherwise `Start`), so the dashboard reflects what's done. `Draft`, `Cancelled`, and
   already-`Completed` events are left untouched.

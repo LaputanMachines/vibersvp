@@ -12,7 +12,15 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from .models import Channel, DueReminder, Event, Offset, Rsvp
+from .models import (
+    Channel,
+    DueReminder,
+    Event,
+    NewRsvpAlert,
+    Offset,
+    Rsvp,
+    new_rsvp_alert_key,
+)
 
 # Events only get reminders while they're live and accepting volunteers.
 OPEN_STATUS = "Open"
@@ -86,6 +94,39 @@ def compute_due_reminders(
                 for channel in channels_for(rsvp):
                     due.append(DueReminder(rsvp=rsvp, event=event, offset=offset, channel=channel))
     return due
+
+
+def compute_new_rsvp_alerts(
+    rsvps: list[Rsvp],
+    events: list[Event],
+    now: datetime,
+    lookback: timedelta,
+    already_alerted_keys: set[str],
+) -> list[NewRsvpAlert]:
+    """Return one alert per volunteer who has freshly RSVP'd 'Going'.
+
+    "Fresh" means three things, all required:
+      1. Status is 'Going' — we don't ping the organizer about 'Not Going' declines.
+      2. The record was created within `lookback` of `now`. The worker is stateless and
+         re-reads every RSVP each run, so without this window the first deploy would text
+         the organizer about the entire pre-existing back-catalogue. An RSVP with no
+         `created` timestamp can't be placed in time, so it's skipped (see the Created
+         field note in the README).
+      3. We haven't already alerted for this RSVP — the key is checked against the same
+         ReminderLog-backed set that dedupes reminders, so each RSVP alerts exactly once.
+    """
+    events_by_id = {event.id: event for event in events}
+    alerts: list[NewRsvpAlert] = []
+    for rsvp in rsvps:
+        if rsvp.status != GOING_STATUS:
+            continue
+        if rsvp.created is None or now - rsvp.created > lookback:
+            continue
+        if new_rsvp_alert_key(rsvp.id) in already_alerted_keys:
+            continue
+        event = events_by_id.get(rsvp.event_id) if rsvp.event_id else None
+        alerts.append(NewRsvpAlert(rsvp=rsvp, event=event))
+    return alerts
 
 
 def within_sms_window(now: datetime, tz: ZoneInfo, start_hour: int, end_hour: int) -> bool:

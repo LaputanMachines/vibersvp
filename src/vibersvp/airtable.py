@@ -79,6 +79,7 @@ class AirtableRepo:
             phone=(f.get("Phone") or None),
             event_id=event_links[0] if event_links else None,
             status=f.get("Status", ""),
+            created=_parse_dt(f.get("Created")),
         )
 
     # --- writes --------------------------------------------------------------
@@ -88,7 +89,7 @@ class AirtableRepo:
         *,
         key: str,
         rsvp_id: str,
-        event_id: str,
+        event_id: str | None,
         offset_label: str,
         channel: Channel,
         status: str,
@@ -96,19 +97,21 @@ class AirtableRepo:
         provider_message_id: str | None = None,
         error: str | None = None,
     ) -> None:
-        self._log.create(
-            {
-                "Key": key,
-                "RSVP": [rsvp_id],
-                "Event": [event_id],
-                "Offset": offset_label,
-                "Channel": channel.value,
-                "Sent at": sent_at.isoformat(),
-                "Status": status,
-                "Provider message id": provider_message_id or "",
-                "Error": error or "",
-            }
-        )
+        fields = {
+            "Key": key,
+            "RSVP": [rsvp_id],
+            "Offset": offset_label,
+            "Channel": channel.value,
+            "Sent at": sent_at.isoformat(),
+            "Status": status,
+            "Provider message id": provider_message_id or "",
+            "Error": error or "",
+        }
+        # New-RSVP alerts may not be linked to an event; only set the link when we have one
+        # (Airtable rejects a link array containing null).
+        if event_id:
+            fields["Event"] = [event_id]
+        self._log.create(fields)
 
     def mark_event_completed(self, event_id: str) -> None:
         """Flip an event's Status to Completed — called once its date has passed."""

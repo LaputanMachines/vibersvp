@@ -89,3 +89,19 @@ def render_sms(event: Event, rsvp: Rsvp, ctx: MessageContext) -> str:
         f"{ctx.campaign_name}: Reminder — you've signed up to volunteer with Jack Sandor at "
         f"{when}, {where}. Looking forward to seeing you! Reply STOP to opt out."
     )
+
+
+def render_new_rsvp_alert(rsvp: Rsvp, event: Event | None, ctx: MessageContext) -> str:
+    """Short heads-up texted to the organizer when a volunteer RSVPs 'Going'.
+
+    This is an operational message to the organizer's own number (they opted in), not a
+    broadcast to a volunteer — so it carries no STOP/opt-out line.
+    """
+    name = (rsvp.name or "Someone").strip() or "Someone"
+    if event is not None:
+        shift = f"{event.name} ({_format_when(event, ctx.tz)})"
+    else:
+        shift = "a shift"
+    contact_bits = [bit for bit in (rsvp.email, rsvp.phone) if bit]
+    contact = f" Contact: {' / '.join(contact_bits)}." if contact_bits else ""
+    return f"{ctx.campaign_name}: New RSVP — {name} is going to {shift}.{contact}"

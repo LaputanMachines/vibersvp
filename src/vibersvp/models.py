@@ -41,6 +41,9 @@ class Rsvp:
     phone: str | None
     event_id: str | None
     status: str
+    # When the RSVP record was created (Airtable "Created time" field), tz-aware UTC.
+    # None when the field is absent; new-RSVP alerts need it to tell fresh signups apart.
+    created: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -58,5 +61,28 @@ class DueReminder:
         return reminder_key(self.rsvp.id, self.offset.label, self.channel)
 
 
+# Pseudo-"offset" label for the one-off text we send the organizer when someone new RSVPs.
+# It rides the same ReminderLog idempotency machinery as reminders — the label just keeps
+# its keys from colliding with real reminder offsets ("24h", "2h", …).
+NEW_RSVP_OFFSET_LABEL = "new-rsvp"
+
+
+@dataclass(frozen=True)
+class NewRsvpAlert:
+    """A heads-up to the organizer that a volunteer just RSVP'd 'Going'."""
+
+    rsvp: Rsvp
+    event: Event | None  # None if the RSVP isn't linked to an event (or it was deleted)
+
+    @property
+    def key(self) -> str:
+        """Stable idempotency key — the organizer is alerted once per RSVP, ever."""
+        return new_rsvp_alert_key(self.rsvp.id)
+
+
 def reminder_key(rsvp_id: str, offset_label: str, channel: Channel) -> str:
     return f"{rsvp_id}::{offset_label}::{channel.value}"
+
+
+def new_rsvp_alert_key(rsvp_id: str) -> str:
+    return reminder_key(rsvp_id, NEW_RSVP_OFFSET_LABEL, Channel.SMS)

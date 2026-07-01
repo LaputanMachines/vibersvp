@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from vibersvp.models import Event, Rsvp
-from vibersvp.templates import MessageContext, render_email, render_sms
+from vibersvp.templates import (
+    MessageContext,
+    render_email,
+    render_new_rsvp_alert,
+    render_sms,
+)
 
 UTC = timezone.utc
 
@@ -55,3 +60,20 @@ def test_sms_is_short_identified_and_has_stop():
     assert "Jack Sandor for Victoria" in sms
     assert "Fernwood door-knock" in sms
     assert "STOP" in sms
+
+
+def test_new_rsvp_alert_names_the_volunteer_and_event():
+    alert = render_new_rsvp_alert(RSVP, EVENT, CTX)
+    assert "New RSVP" in alert
+    assert "Pat Volunteer" in alert
+    assert "Fernwood door-knock" in alert
+    assert "11:00 AM" in alert  # event time, in the campaign's local zone
+    assert "pat@example.com" in alert  # contact so Jack can follow up
+    # operational message to the organizer's own phone — no volunteer-facing opt-out
+    assert "STOP" not in alert
+
+
+def test_new_rsvp_alert_handles_missing_event():
+    alert = render_new_rsvp_alert(RSVP, None, CTX)
+    assert "Pat Volunteer" in alert
+    assert "a shift" in alert  # graceful fallback when no event is linked
