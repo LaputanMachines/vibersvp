@@ -15,7 +15,6 @@
     <style>
       .wm   { font-family: "Helvetica Neue", Arial, "DejaVu Sans", sans-serif; font-weight: 800; }
       .tag  { font-family: "Helvetica Neue", Arial, "DejaVu Sans", sans-serif; font-weight: 400; }
-      .chip { font-family: "Helvetica Neue", Arial, "DejaVu Sans", sans-serif; font-weight: 600; letter-spacing: 0.6px; }
     </style>
   </defs>
 
@@ -51,13 +50,6 @@
   </g>
 
   <!-- Wordmark + tagline -->
-  <text x="266" y="176" class="wm" font-size="92" fill="#FFFFFF">vibersvp</text>
-  <text x="270" y="224" class="tag" font-size="27" fill="#FFFFFF" fill-opacity="0.92">RSVP + reminders for canvassing volunteer shifts</text>
-
-  <!-- Campaign chip -->
-  <g>
-    <rect x="270" y="250" width="424" height="44" rx="22" fill="#FFFFFF" fill-opacity="0.14"/>
-    <circle cx="296" cy="272" r="7" fill="#FACC15"/>
-    <text x="314" y="279" class="chip" font-size="21" fill="#FFFFFF">JACK SANDOR FOR VICTORIA</text>
-  </g>
+  <text x="266" y="186" class="wm" font-size="92" fill="#FFFFFF">vibersvp</text>
+  <text x="270" y="234" class="tag" font-size="27" fill="#FFFFFF" fill-opacity="0.92">RSVP + reminders for canvassing volunteer shifts</text>
 </svg>
