@@ -41,7 +41,10 @@ class AirtableRepo:
         return [self._to_event(r) for r in self._events.all()]
 
     def load_rsvps(self) -> list[Rsvp]:
-        return [self._to_rsvp(r) for r in self._rsvps.all()]
+        rsvps: list[Rsvp] = []
+        for record in self._rsvps.all():
+            rsvps.extend(self._to_rsvps(record))
+        return rsvps
 
     def load_sent_keys(self) -> set[str]:
         """Keys of reminders already successfully sent — used to dedupe before sending."""
@@ -69,18 +72,28 @@ class AirtableRepo:
         )
 
     @staticmethod
-    def _to_rsvp(record: dict) -> Rsvp:
+    def _to_rsvps(record: dict) -> list[Rsvp]:
+        """Map one Airtable RSVP record to one `Rsvp` *per linked event*.
+
+        Airtable's `Event` link is multi-valued: a volunteer can RSVP to several shifts in
+        a single form submission, producing one record with N linked events. We fan that
+        record out into N `Rsvp` objects (same record id, different `event_id`) so each
+        event gets its own reminders and its own organizer alert. A record with no event
+        link still yields one `Rsvp` (event_id=None) so it can trigger a new-RSVP alert.
+        """
         f = record.get("fields", {})
         event_links = f.get("Event") or []
-        return Rsvp(
+        common = dict(
             id=record["id"],
             name=f.get("Name", ""),
             email=(f.get("Email") or None),
             phone=(f.get("Phone") or None),
-            event_id=event_links[0] if event_links else None,
             status=f.get("Status", ""),
             created=_parse_dt(f.get("Created")),
         )
+        if not event_links:
+            return [Rsvp(event_id=None, **common)]
+        return [Rsvp(event_id=event_id, **common) for event_id in event_links]
 
     # --- writes --------------------------------------------------------------
 

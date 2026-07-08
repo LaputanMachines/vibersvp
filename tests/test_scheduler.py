@@ -170,7 +170,7 @@ def test_idempotency_keys_are_distinct_and_stable():
     due = compute_due_reminders([make_event()], [make_rsvp()], now, DEFAULT_OFFSETS)
     keys = [d.key for d in due]
     assert len(keys) == len(set(keys))  # no duplicates
-    assert "rsvp1::24h::Email" in keys
+    assert "rsvp1::evt1::24h::Email" in keys  # key carries the event id
 
 
 # --- events_to_complete ------------------------------------------------------
@@ -220,13 +220,30 @@ def test_new_going_rsvp_within_lookback_alerts():
     assert len(alerts) == 1
     assert alerts[0].rsvp.id == "rsvp1"
     assert alerts[0].event.id == "evt1"  # event resolved from the RSVP's link
-    assert alerts[0].key == "rsvp1::new-rsvp::SMS"
+    assert alerts[0].key == "rsvp1::evt1::new-rsvp::SMS"
 
 
 def test_alert_skipped_when_already_sent():
     rsvp = make_rsvp(created=NOW - timedelta(minutes=10))
-    already = {new_rsvp_alert_key("rsvp1")}
+    already = {new_rsvp_alert_key("rsvp1", "evt1")}
     assert compute_new_rsvp_alerts([rsvp], [make_event()], NOW, LOOKBACK, already) == []
+
+
+def test_same_record_alerts_once_per_event():
+    # One volunteer, one record id, linked to two events → two distinct alerts/keys.
+    e1, e2 = make_event(id="evt1"), make_event(id="evt2")
+    r1 = make_rsvp(event_id="evt1", created=NOW - timedelta(minutes=5))
+    r2 = make_rsvp(event_id="evt2", created=NOW - timedelta(minutes=5))
+    alerts = compute_new_rsvp_alerts([r1, r2], [e1, e2], NOW, LOOKBACK, set())
+    assert len(alerts) == 2
+    assert {a.key for a in alerts} == {
+        "rsvp1::evt1::new-rsvp::SMS",
+        "rsvp1::evt2::new-rsvp::SMS",
+    }
+    # Having alerted for evt1 must not suppress the evt2 alert.
+    already = {new_rsvp_alert_key("rsvp1", "evt1")}
+    remaining = compute_new_rsvp_alerts([r1, r2], [e1, e2], NOW, LOOKBACK, already)
+    assert [a.event.id for a in remaining] == ["evt2"]
 
 
 def test_not_going_rsvp_never_alerts():
@@ -252,10 +269,14 @@ def test_alert_still_fires_when_event_link_missing():
 
 
 def test_alert_key_is_stable_and_distinct_from_reminder_keys():
-    key = new_rsvp_alert_key("rsvp1")
-    assert key == "rsvp1::new-rsvp::SMS"
-    # never collides with a reminder key, whose middle segment is an offset label
-    assert key not in {"rsvp1::24h::SMS", "rsvp1::2h::Email"}
+    key = new_rsvp_alert_key("rsvp1", "evt1")
+    assert key == "rsvp1::evt1::new-rsvp::SMS"
+    # never collides with a reminder key, whose offset segment is a duration label
+    assert key not in {"rsvp1::evt1::24h::SMS", "rsvp1::evt1::2h::Email"}
+
+
+def test_alert_key_uses_placeholder_when_no_event():
+    assert new_rsvp_alert_key("rsvp1", None) == "rsvp1::no-event::new-rsvp::SMS"
 
 
 # --- within_sms_window -------------------------------------------------------

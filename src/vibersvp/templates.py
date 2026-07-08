@@ -85,8 +85,9 @@ def render_email(event: Event, rsvp: Rsvp, ctx: MessageContext) -> EmailContent:
 def render_sms(event: Event, rsvp: Rsvp, ctx: MessageContext) -> str:
     when = _format_when(event, ctx.tz)
     where = event.location or "see email for details"
+    shift = event.name or "your shift"
     return (
-        f"{ctx.campaign_name}: Reminder — you've signed up to volunteer with Jack Sandor at "
+        f"{ctx.campaign_name}: Reminder — you've signed up to volunteer at {shift} on "
         f"{when}, {where}. Looking forward to seeing you! Reply STOP to opt out."
     )
 

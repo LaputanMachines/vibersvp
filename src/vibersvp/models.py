@@ -60,8 +60,8 @@ class DueReminder:
 
     @property
     def key(self) -> str:
-        """Stable idempotency key — one send per (rsvp, offset, channel), ever."""
-        return reminder_key(self.rsvp.id, self.offset.label, self.channel)
+        """Stable idempotency key — one send per (rsvp, event, offset, channel), ever."""
+        return reminder_key(self.rsvp.id, self.event.id, self.offset.label, self.channel)
 
 
 # Pseudo-"offset" label for the one-off text we send the organizer when someone new RSVPs.
@@ -79,13 +79,24 @@ class NewRsvpAlert:
 
     @property
     def key(self) -> str:
-        """Stable idempotency key — the organizer is alerted once per RSVP, ever."""
-        return new_rsvp_alert_key(self.rsvp.id)
+        """Stable idempotency key — the organizer is alerted once per (RSVP, event), ever.
+
+        Keyed on the RSVP record *and* its event so a single record linked to several
+        events yields a distinct alert per event (Airtable's Event link is multi-valued).
+        Uses ``rsvp.event_id`` (not ``event.id``) so a dangling link to a deleted event
+        still produces a stable key that matches the dedup check in the scheduler.
+        """
+        return new_rsvp_alert_key(self.rsvp.id, self.rsvp.event_id)
 
 
-def reminder_key(rsvp_id: str, offset_label: str, channel: Channel) -> str:
-    return f"{rsvp_id}::{offset_label}::{channel.value}"
+# Placeholder event segment for an RSVP with no linked event, so its key is still
+# well-formed (four segments) and never collides with a real event id.
+NO_EVENT_SEGMENT = "no-event"
 
 
-def new_rsvp_alert_key(rsvp_id: str) -> str:
-    return reminder_key(rsvp_id, NEW_RSVP_OFFSET_LABEL, Channel.SMS)
+def reminder_key(rsvp_id: str, event_id: str | None, offset_label: str, channel: Channel) -> str:
+    return f"{rsvp_id}::{event_id or NO_EVENT_SEGMENT}::{offset_label}::{channel.value}"
+
+
+def new_rsvp_alert_key(rsvp_id: str, event_id: str | None) -> str:
+    return reminder_key(rsvp_id, event_id, NEW_RSVP_OFFSET_LABEL, Channel.SMS)

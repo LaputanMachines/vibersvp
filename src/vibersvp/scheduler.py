@@ -115,7 +115,11 @@ def compute_new_rsvp_alerts(
     lookback: timedelta,
     already_alerted_keys: set[str],
 ) -> list[NewRsvpAlert]:
-    """Return one alert per volunteer who has freshly RSVP'd 'Going'.
+    """Return one alert per (freshly-RSVP'd 'Going' record, event) pair.
+
+    The repo fans a single Airtable RSVP record that links several events into one `Rsvp`
+    per event, so a volunteer who signs up for three shifts in one submission produces
+    three alerts here — each carrying its own event and its own idempotency key.
 
     "Fresh" means three things, all required:
       1. Status is 'Going' — we don't ping the organizer about 'Not Going' declines.
@@ -124,8 +128,8 @@ def compute_new_rsvp_alerts(
          the organizer about the entire pre-existing back-catalogue. An RSVP with no
          `created` timestamp can't be placed in time, so it's skipped (see the Created
          field note in the README).
-      3. We haven't already alerted for this RSVP — the key is checked against the same
-         ReminderLog-backed set that dedupes reminders, so each RSVP alerts exactly once.
+      3. We haven't already alerted for this (RSVP, event) — the key is checked against the
+         same ReminderLog-backed set that dedupes reminders, so each pair alerts once.
     """
     events_by_id = {event.id: event for event in events}
     alerts: list[NewRsvpAlert] = []
@@ -134,7 +138,7 @@ def compute_new_rsvp_alerts(
             continue
         if rsvp.created is None or now - rsvp.created > lookback:
             continue
-        if new_rsvp_alert_key(rsvp.id) in already_alerted_keys:
+        if new_rsvp_alert_key(rsvp.id, rsvp.event_id) in already_alerted_keys:
             continue
         event = events_by_id.get(rsvp.event_id) if rsvp.event_id else None
         alerts.append(NewRsvpAlert(rsvp=rsvp, event=event))
