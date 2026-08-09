@@ -7,9 +7,11 @@ from zoneinfo import ZoneInfo
 
 from vibersvp.models import Event, Rsvp
 from vibersvp.templates import (
+    ROSTER_NAME_LIMIT,
     MessageContext,
     render_email,
     render_new_rsvp_alert,
+    render_roster_digest,
     render_sms,
 )
 
@@ -77,3 +79,42 @@ def test_new_rsvp_alert_handles_missing_event():
     alert = render_new_rsvp_alert(RSVP, None, CTX)
     assert "Pat Volunteer" in alert
     assert "a shift" in alert  # graceful fallback when no event is linked
+
+
+def _roster(count: int) -> tuple[Rsvp, ...]:
+    return tuple(
+        Rsvp(id=f"rsvp{i}", name=f"Volunteer {i:02d}", email=None, phone=None,
+             event_id="evt1", status="Going")
+        for i in range(count)
+    )
+
+
+def test_roster_digest_lists_names_time_and_place():
+    digest = render_roster_digest(EVENT, _roster(3), "2h", CTX)
+    assert "Canvass in ~2h" in digest
+    assert "Fernwood door-knock" in digest
+    assert "11:00 AM" in digest  # event time, in the campaign's local zone
+    assert "1234 Gladstone Ave" in digest
+    assert "3 going: Volunteer 00, Volunteer 01, Volunteer 02." in digest
+    # organizer's own phone — no volunteer-facing opt-out
+    assert "STOP" not in digest
+
+
+def test_roster_digest_says_so_when_nobody_signed_up():
+    digest = render_roster_digest(EVENT, (), "2h", CTX)
+    assert "No RSVPs yet." in digest
+    assert "going:" not in digest
+
+
+def test_roster_digest_truncates_a_long_roster():
+    digest = render_roster_digest(EVENT, _roster(ROSTER_NAME_LIMIT + 5), "2h", CTX)
+    assert f"{ROSTER_NAME_LIMIT + 5} going:" in digest  # the true count is always shown
+    assert "(+5 more)" in digest
+    assert f"Volunteer {ROSTER_NAME_LIMIT - 1:02d}" in digest  # last name before the cut
+    assert f"Volunteer {ROSTER_NAME_LIMIT:02d}" not in digest  # first name past it
+
+
+def test_roster_digest_handles_a_nameless_rsvp():
+    anonymous = (Rsvp(id="rsvp9", name="", email=None, phone=None,
+                      event_id="evt1", status="Going"),)
+    assert "1 going: (no name)." in render_roster_digest(EVENT, anonymous, "2h", CTX)

@@ -101,7 +101,7 @@ class AirtableRepo:
         self,
         *,
         key: str,
-        rsvp_id: str,
+        rsvp_id: str | None,
         event_id: str | None,
         offset_label: str,
         channel: Channel,
@@ -112,7 +112,6 @@ class AirtableRepo:
     ) -> None:
         fields = {
             "Key": key,
-            "RSVP": [rsvp_id],
             "Offset": offset_label,
             "Channel": channel.value,
             "Sent at": sent_at.isoformat(),
@@ -120,8 +119,11 @@ class AirtableRepo:
             "Provider message id": provider_message_id or "",
             "Error": error or "",
         }
-        # New-RSVP alerts may not be linked to an event; only set the link when we have one
-        # (Airtable rejects a link array containing null).
+        # Only set a link when we actually have one (Airtable rejects a link array
+        # containing null): new-RSVP alerts may have no event, and a roster digest is
+        # about a whole event, so it has no single RSVP.
+        if rsvp_id:
+            fields["RSVP"] = [rsvp_id]
         if event_id:
             fields["Event"] = [event_id]
         self._log.create(fields)

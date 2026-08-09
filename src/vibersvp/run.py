@@ -22,10 +22,17 @@ from .models import NEW_RSVP_OFFSET_LABEL, Channel
 from .scheduler import (
     compute_due_reminders,
     compute_new_rsvp_alerts,
+    compute_roster_digests,
     events_to_complete,
     within_sms_window,
 )
-from .templates import MessageContext, render_email, render_new_rsvp_alert, render_sms
+from .templates import (
+    MessageContext,
+    render_email,
+    render_new_rsvp_alert,
+    render_roster_digest,
+    render_sms,
+)
 
 logger = logging.getLogger("vibersvp")
 
@@ -61,17 +68,19 @@ def main(argv: list[str] | None = None) -> int:
     due = compute_due_reminders(events, rsvps, now, settings.default_offsets)
     to_complete = events_to_complete(events, now)
     logger.info(
-        "now=%s | events=%d rsvps=%d due=%d complete=%d | email=%s sms=%s rsvp_alerts=%s dry_run=%s",
+        "now=%s | events=%d rsvps=%d due=%d complete=%d | email=%s sms=%s rsvp_alerts=%s "
+        "roster_digest=%s dry_run=%s",
         now.isoformat(), len(events), len(rsvps), len(due), len(to_complete),
-        settings.email_enabled, settings.sms_enabled, settings.new_rsvp_alerts_enabled, args.dry_run,
+        settings.email_enabled, settings.sms_enabled, settings.new_rsvp_alerts_enabled,
+        settings.roster_digest_offset if settings.roster_digest_enabled else False, args.dry_run,
     )
 
     # Flip finished events to Completed. Runs every tick, independent of reminders.
     _complete_finished_events(repo, to_complete, args.dry_run)
 
-    # Bail only when there's nothing left that could send: no due reminders and the
-    # organizer alerts are off. (When alerts are on we must still scan for new RSVPs.)
-    if not due and not settings.new_rsvp_alerts_enabled:
+    # Bail only when there's nothing left that could send: no due reminders and both
+    # organizer features off. (When either is on we must still scan for work to do.)
+    if not due and not settings.new_rsvp_alerts_enabled and not settings.roster_digest_enabled:
         return 0
 
     sent_keys: set[str] = set() if args.dry_run else repo.load_sent_keys()
@@ -82,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     counts = {
         "sent": 0, "would_send": 0, "dup": 0, "quiet": 0, "unconfigured": 0, "failed": 0,
         "alerted": 0, "alert_dup": 0, "would_alert": 0,
+        "digested": 0, "digest_dup": 0, "would_digest": 0,
     }
 
     # Text the organizer about brand-new "Going" RSVPs. Operational and low-volume, so
@@ -91,6 +101,14 @@ def main(argv: list[str] | None = None) -> int:
             rsvps, events, now, settings.new_rsvp_lookback_delta, sent_keys
         )
         _alert_new_rsvps(repo, settings, alerts, sms_notifier, ctx, now, sent_keys, args.dry_run, counts)
+
+    # Text the organizer the roster shortly before each shift. Also quiet-hours exempt: a
+    # 2h digest for a 9 AM canvass would otherwise be deferred until after the shift began.
+    if settings.roster_digest_enabled:
+        digests = compute_roster_digests(
+            events, rsvps, now, settings.roster_digest_lead, sent_keys
+        )
+        _send_roster_digests(repo, settings, digests, sms_notifier, ctx, now, sent_keys, args.dry_run, counts)
 
     for reminder in due:
         key = reminder.key
@@ -221,6 +239,44 @@ def _alert_new_rsvps(repo, settings, alerts, sms_notifier, ctx, now, sent_keys, 
         else:
             counts["failed"] += 1
             logger.error("FAILED to alert organizer about RSVP %s: %s", rsvp.name, result.error)
+
+
+def _send_roster_digests(repo, settings, digests, sms_notifier, ctx, now, sent_keys, dry_run, counts):
+    """Text the organizer one roster per upcoming shift. Idempotent via ReminderLog."""
+    for digest in digests:
+        key = digest.key
+        if key in sent_keys:
+            counts["digest_dup"] += 1
+            continue
+
+        event = digest.event
+        if dry_run:
+            logger.info("WOULD DIGEST %s: %s (%d going, %s before)",
+                        settings.jack_phone, event.name, len(digest.attendees), digest.offset.label)
+            counts["would_digest"] += 1
+            continue
+
+        body = render_roster_digest(event, digest.attendees, digest.offset.label, ctx)
+        result = sms_notifier.send_sms(to=settings.jack_phone, text=body)
+        repo.log_reminder(
+            key=key,
+            rsvp_id=None,  # a digest covers the whole event, not one volunteer
+            event_id=event.id,
+            offset_label=digest.offset_label,
+            channel=Channel.SMS,
+            status="Sent" if result.ok else "Failed",
+            sent_at=now,
+            provider_message_id=result.message_id,
+            error=result.error,
+        )
+        if result.ok:
+            sent_keys.add(key)  # guard against a duplicate within this same run
+            counts["digested"] += 1
+            logger.info("DIGESTED roster: %s (%d going) msg_id=%s",
+                        event.name, len(digest.attendees), result.message_id)
+        else:
+            counts["failed"] += 1
+            logger.error("FAILED to send roster digest for %s: %s", event.name, result.error)
 
 
 def _send(channel, event, rsvp, ctx, email_notifier, sms_notifier):

@@ -89,6 +89,36 @@ class NewRsvpAlert:
         return new_rsvp_alert_key(self.rsvp.id, self.rsvp.event_id)
 
 
+# Prefix for the pseudo-"offset" label of the pre-shift roster digest. The digest has its
+# own lead time ("2h"), so the prefix is what keeps its key from colliding with the
+# volunteers' own "2h" reminder for the same event.
+ROSTER_OFFSET_PREFIX = "roster-"
+
+# Placeholder RSVP segment for the roster digest: it's about a whole event, not one
+# volunteer, so there's no RSVP record id to key on. Airtable record ids always start
+# with "rec", so this can never collide with a real one.
+NO_RSVP_SEGMENT = "roster"
+
+
+@dataclass(frozen=True)
+class RosterDigest:
+    """The pre-shift roster texted to the organizer: who's coming to this event."""
+
+    event: Event
+    attendees: tuple[Rsvp, ...]  # 'Going' RSVPs, name-sorted; empty means nobody signed up
+    offset: Offset  # the digest's own lead time, independent of the volunteer offsets
+
+    @property
+    def offset_label(self) -> str:
+        """Label written to ReminderLog's Offset column, e.g. 'roster-2h'."""
+        return ROSTER_OFFSET_PREFIX + self.offset.label
+
+    @property
+    def key(self) -> str:
+        """Stable idempotency key — one digest per (event, lead time), ever."""
+        return roster_digest_key(self.event.id, self.offset.label)
+
+
 # Placeholder event segment for an RSVP with no linked event, so its key is still
 # well-formed (four segments) and never collides with a real event id.
 NO_EVENT_SEGMENT = "no-event"
@@ -100,3 +130,7 @@ def reminder_key(rsvp_id: str, event_id: str | None, offset_label: str, channel:
 
 def new_rsvp_alert_key(rsvp_id: str, event_id: str | None) -> str:
     return reminder_key(rsvp_id, event_id, NEW_RSVP_OFFSET_LABEL, Channel.SMS)
+
+
+def roster_digest_key(event_id: str, offset_label: str) -> str:
+    return reminder_key(NO_RSVP_SEGMENT, event_id, ROSTER_OFFSET_PREFIX + offset_label, Channel.SMS)

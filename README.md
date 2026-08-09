@@ -92,9 +92,10 @@ The workflow is `.github/workflows/reminders.yml` — runs `python -m vibersvp.r
 3. In **Settings → Secrets and variables → Actions**, add:
    - **Secrets:** `AIRTABLE_API_TOKEN`, `AIRTABLE_BASE_ID`, `RESEND_API_KEY`, `EMAIL_FROM`,
      `EMAIL_REPLY_TO`, and (later) `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`,
-     `JACK_PHONE` (for new-RSVP alerts — see below).
+     `JACK_PHONE` (for the new-RSVP alerts and roster digest — see below).
    - **Variables:** `CAMPAIGN_NAME`, `CAMPAIGN_CONTACT`, `TIMEZONE`, `DEFAULT_REMINDER_OFFSETS`,
-     `EMAIL_FROM_NAME`, `NEW_RSVP_LOOKBACK` (optional; defaults to `24h`).
+     `EMAIL_FROM_NAME`, `NEW_RSVP_LOOKBACK` (optional; defaults to `24h`),
+     `ROSTER_DIGEST_OFFSET` (optional; defaults to `2h`, `off` to disable).
 4. Trigger a manual run from the **Actions** tab (`workflow_dispatch`) to test, then let the
    schedule take over.
 
@@ -127,6 +128,30 @@ three vars above) — without it, the alert is skipped just like reminders.
   number send immediately, day or night.
 
 To disable, leave `JACK_PHONE` unset.
+
+### Pre-shift roster digest (text Jack the list before a canvass)
+Two hours before each `Open` event, the worker texts `JACK_PHONE` the roster for that shift:
+
+```
+Jack Sandor for Victoria: Canvass in ~2h - Fernwood door-knock, Wednesday, July 1 at
+11:00 AM PDT, 1234 Gladstone Ave. 3 going: Alex Chen, Pat Volunteer, Sam Ng.
+```
+
+- **Lead time** is `ROSTER_DIGEST_OFFSET` (default `2h`, same `m`/`h`/`d` syntax). It's a
+  single campaign-wide value on purpose — a per-event `Reminder offsets` override changes the
+  *volunteers'* schedule, not Jack's heads-up. Set the variable to **`off`** to disable;
+  blank means "use the default", so an Actions variable you never created can't silently
+  switch it off.
+- **Same window rule as reminders** (`start − offset ≤ now < start`), so cron drift just makes
+  the digest a bit later, never after the shift has started.
+- **Exactly once per (event, lead time)**, via a `ReminderLog` row with `Offset = roster-2h`.
+  That row links the `Event` but no `RSVP` — it's about the whole shift.
+- **Empty rosters still send** ("No RSVPs yet") — that's the text most worth getting.
+- **Names only**, capped at 12 with a `(+N more)` tail so a big shift doesn't turn into a
+  five-segment SMS. The full roster is on the dashboard.
+- **No quiet hours**, same as the new-RSVP alerts — a 2h digest for a 9 AM canvass would
+  otherwise be held until 9 AM and never send.
+- Needs Twilio configured and `JACK_PHONE` set, exactly like the new-RSVP alerts.
 
 ---
 
@@ -166,6 +191,8 @@ rows appear — then run again and confirm **nothing re-sends**.
   later run still inside the send window.
 - When someone RSVPs `Going`, the organizer gets a one-time text (`JACK_PHONE`), deduped through
   the same `ReminderLog` key mechanism and scoped to recent RSVPs by `NEW_RSVP_LOOKBACK`.
+- `ROSTER_DIGEST_OFFSET` before each shift, the organizer gets one more text listing who's
+  coming — keyed `roster::<event id>::roster-<offset>::SMS`, so it's one digest per event, ever.
 - After an event is over, the worker flips its `Status` from `Open` to `Completed` (using `End`
   if set, otherwise `Start`), so the dashboard reflects what's done. `Draft`, `Cancelled`, and
   already-`Completed` events are left untouched.

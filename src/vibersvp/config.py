@@ -17,6 +17,7 @@ from .models import Offset
 from .scheduler import parse_offsets
 
 DEFAULT_TIMEZONE = "America/Vancouver"
+DEFAULT_ROSTER_DIGEST_OFFSET = "2h"
 
 
 class Settings(BaseSettings):
@@ -52,6 +53,12 @@ class Settings(BaseSettings):
     # texting the whole existing RSVP list. Same m/h/d syntax as reminder offsets.
     new_rsvp_lookback: str = "24h"
 
+    # --- Pre-shift roster digest to the organizer (same jack_phone + Twilio requirement) ---
+    # How long before a shift to text the organizer the list of volunteers who RSVP'd
+    # 'Going'. Same m/h/d syntax as the reminder offsets. Set to "off" to disable; blank
+    # means "use the default" so an empty GitHub Actions variable can't silently kill it.
+    roster_digest_offset: str = DEFAULT_ROSTER_DIGEST_OFFSET
+
     # --- Behaviour ---
     # "2h:sms" makes the 2h nudge text-only; the 24h reminder still goes on email + SMS.
     default_reminder_offsets: str = "24h,2h:sms"
@@ -70,6 +77,15 @@ class Settings(BaseSettings):
             return DEFAULT_TIMEZONE
         return v.strip() if isinstance(v, str) else v
 
+    @field_validator("roster_digest_offset", mode="before")
+    @classmethod
+    def _default_blank_roster_digest_offset(cls, v: object) -> object:
+        """Blank means "unset", not "disabled" — a GitHub Actions variable that was never
+        created arrives as "", and that shouldn't quietly turn the digest off. Use "off"."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return DEFAULT_ROSTER_DIGEST_OFFSET
+        return v.strip() if isinstance(v, str) else v
+
     @property
     def email_enabled(self) -> bool:
         return bool(self.resend_api_key and self.email_from)
@@ -82,6 +98,17 @@ class Settings(BaseSettings):
     def new_rsvp_alerts_enabled(self) -> bool:
         """We can only text the organizer if SMS is wired up and we know their number."""
         return bool(self.sms_enabled and self.jack_phone)
+
+    @property
+    def roster_digest_enabled(self) -> bool:
+        """Needs the same SMS wiring as the new-RSVP alerts, plus a usable lead time."""
+        return bool(self.sms_enabled and self.jack_phone and self.roster_digest_lead)
+
+    @cached_property
+    def roster_digest_lead(self) -> Offset | None:
+        """The digest lead time as an Offset, or None when it's "off" (or unparseable)."""
+        offsets = parse_offsets(self.roster_digest_offset)
+        return offsets[0] if offsets else None
 
     @cached_property
     def tz(self) -> ZoneInfo:

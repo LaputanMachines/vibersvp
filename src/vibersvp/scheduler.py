@@ -18,8 +18,10 @@ from .models import (
     Event,
     NewRsvpAlert,
     Offset,
+    RosterDigest,
     Rsvp,
     new_rsvp_alert_key,
+    roster_digest_key,
 )
 
 # Events only get reminders while they're live and accepting volunteers.
@@ -143,6 +145,48 @@ def compute_new_rsvp_alerts(
         event = events_by_id.get(rsvp.event_id) if rsvp.event_id else None
         alerts.append(NewRsvpAlert(rsvp=rsvp, event=event))
     return alerts
+
+
+def compute_roster_digests(
+    events: list[Event],
+    rsvps: list[Rsvp],
+    now: datetime,
+    offset: Offset,
+    already_sent_keys: set[str],
+) -> list[RosterDigest]:
+    """Return the pre-shift roster digests due now — one per Open event entering its window.
+
+    Same window rule as `compute_due_reminders` (`start - offset <= now < start`), so a
+    late cron run still sends the digest, just later, and never after the shift begins.
+
+    Two deliberate differences from the volunteer reminders:
+      * The lead time is a single config value, not the per-event `Reminder offsets` — the
+        organizer's heads-up shouldn't move because a volunteer schedule was tweaked.
+      * An event with **no** 'Going' RSVPs still produces a digest. "Nobody signed up for
+        the canvass starting in 2h" is the most useful text this feature can send.
+    """
+    going_by_event: dict[str, dict[str, Rsvp]] = defaultdict(dict)
+    for rsvp in rsvps:
+        if rsvp.status == GOING_STATUS and rsvp.event_id:
+            # Keyed by record id: the same volunteer can't appear twice on one event's roster.
+            going_by_event[rsvp.event_id].setdefault(rsvp.id, rsvp)
+
+    digests: list[RosterDigest] = []
+    for event in events:
+        if event.status not in ACTIVE_EVENT_STATUSES:
+            continue
+        if event.start is None or now >= event.start:
+            continue
+        if now < event.start - timedelta(minutes=offset.minutes):
+            continue
+        if roster_digest_key(event.id, offset.label) in already_sent_keys:
+            continue
+        attendees = sorted(
+            going_by_event.get(event.id, {}).values(),
+            key=lambda r: ((r.name or "").strip().lower(), r.id),
+        )
+        digests.append(RosterDigest(event=event, attendees=tuple(attendees), offset=offset))
+    return digests
 
 
 def within_sms_window(now: datetime, tz: ZoneInfo, start_hour: int, end_hour: int) -> bool:

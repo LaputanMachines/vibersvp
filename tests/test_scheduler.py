@@ -5,10 +5,18 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from vibersvp.models import Channel, Event, Offset, Rsvp, new_rsvp_alert_key
+from vibersvp.models import (
+    Channel,
+    Event,
+    Offset,
+    Rsvp,
+    new_rsvp_alert_key,
+    roster_digest_key,
+)
 from vibersvp.scheduler import (
     compute_due_reminders,
     compute_new_rsvp_alerts,
+    compute_roster_digests,
     events_to_complete,
     parse_offsets,
     within_sms_window,
@@ -277,6 +285,87 @@ def test_alert_key_is_stable_and_distinct_from_reminder_keys():
 
 def test_alert_key_uses_placeholder_when_no_event():
     assert new_rsvp_alert_key("rsvp1", None) == "rsvp1::no-event::new-rsvp::SMS"
+
+
+# --- compute_roster_digests --------------------------------------------------
+
+DIGEST_OFFSET = Offset(120, "2h")
+
+
+def test_roster_digest_due_inside_window_lists_going_volunteers():
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)  # 1h before the 18:00 start
+    rsvps = [
+        make_rsvp(id="rsvp2", name="Zoe Last"),
+        make_rsvp(id="rsvp1", name="Al First"),
+        make_rsvp(id="rsvp3", name="Nope Person", status="Not Going"),
+    ]
+    (digest,) = compute_roster_digests([make_event()], rsvps, now, DIGEST_OFFSET, set())
+    assert digest.event.id == "evt1"
+    assert [r.name for r in digest.attendees] == ["Al First", "Zoe Last"]  # name-sorted
+    assert digest.key == "roster::evt1::roster-2h::SMS"
+    assert digest.offset_label == "roster-2h"
+
+
+def test_roster_digest_not_due_before_window():
+    now = datetime(2026, 7, 1, 15, 0, tzinfo=UTC)  # 3h before; the 2h window isn't open
+    assert compute_roster_digests([make_event()], [make_rsvp()], now, DIGEST_OFFSET, set()) == []
+
+
+def test_roster_digest_not_sent_after_event_starts():
+    now = datetime(2026, 7, 1, 18, 30, tzinfo=UTC)  # shift already began
+    assert compute_roster_digests([make_event()], [make_rsvp()], now, DIGEST_OFFSET, set()) == []
+
+
+def test_roster_digest_still_sent_when_nobody_rsvpd():
+    # An empty roster is the most useful digest of all — Jack can still scramble.
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
+    (digest,) = compute_roster_digests([make_event()], [], now, DIGEST_OFFSET, set())
+    assert digest.attendees == ()
+
+
+def test_roster_digest_skipped_when_already_sent():
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
+    already = {roster_digest_key("evt1", "2h")}
+    assert compute_roster_digests([make_event()], [make_rsvp()], now, DIGEST_OFFSET, already) == []
+
+
+def test_roster_digest_skips_inactive_and_undated_events():
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
+    for event in (make_event(status="Cancelled"), make_event(status="Draft"), make_event(start=None)):
+        assert compute_roster_digests([event], [make_rsvp()], now, DIGEST_OFFSET, set()) == []
+
+
+def test_roster_digest_ignores_per_event_offset_override():
+    # The organizer's lead time is a single config value; a per-event volunteer schedule
+    # override must not move it.
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
+    event = make_event(reminder_offsets=(Offset(30, "30m"),))
+    (digest,) = compute_roster_digests([event], [make_rsvp()], now, DIGEST_OFFSET, set())
+    assert digest.offset.label == "2h"
+
+
+def test_roster_digest_lists_each_volunteer_once_per_event():
+    # Airtable fans a multi-event RSVP into one Rsvp per event, all sharing a record id.
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
+    rsvps = [make_rsvp(event_id="evt1"), make_rsvp(event_id="evt2")]
+    (digest,) = compute_roster_digests([make_event()], rsvps, now, DIGEST_OFFSET, set())
+    assert len(digest.attendees) == 1
+
+
+def test_roster_digest_key_never_collides_with_a_volunteer_reminder():
+    key = roster_digest_key("evt1", "2h")
+    assert key == "roster::evt1::roster-2h::SMS"
+    assert key not in {"rsvp1::evt1::2h::SMS", "rsvp1::evt1::new-rsvp::SMS"}
+
+
+def test_roster_digests_are_per_event():
+    now = datetime(2026, 7, 1, 17, 0, tzinfo=UTC)
+    events = [make_event(id="evt1"), make_event(id="evt2")]
+    digests = compute_roster_digests(events, [make_rsvp()], now, DIGEST_OFFSET, set())
+    assert {d.key for d in digests} == {
+        "roster::evt1::roster-2h::SMS",
+        "roster::evt2::roster-2h::SMS",
+    }
 
 
 # --- within_sms_window -------------------------------------------------------

@@ -106,3 +106,32 @@ def render_new_rsvp_alert(rsvp: Rsvp, event: Event | None, ctx: MessageContext) 
     contact_bits = [bit for bit in (rsvp.email, rsvp.phone) if bit]
     contact = f" Contact: {' / '.join(contact_bits)}." if contact_bits else ""
     return f"{ctx.campaign_name}: New RSVP — {name} is going to {shift}.{contact}"
+
+
+# A full roster in one text can run long (Twilio bills per 153-char segment), so past this
+# many names we send a count instead. The full list is always on the Airtable dashboard.
+ROSTER_NAME_LIMIT = 12
+
+
+def render_roster_digest(
+    event: Event, attendees: tuple[Rsvp, ...], offset_label: str, ctx: MessageContext
+) -> str:
+    """The pre-shift roster texted to the organizer: who's coming to this canvass.
+
+    Like the new-RSVP alert this goes to the organizer's own number, so it carries no
+    STOP line. Names only — contact details would blow past a sane SMS length.
+    """
+    when = _format_when(event, ctx.tz)
+    where = event.location or "see the event for details"
+    shift = event.name or "the canvass"
+    # Plain hyphen, not an em dash: an em dash isn't in the GSM-7 alphabet, which forces
+    # Twilio to UCS-2 and drops the per-segment budget from 153 characters to 67. This is
+    # the one message whose length grows with the roster, so it stays GSM-7.
+    head = f"{ctx.campaign_name}: Canvass in ~{offset_label} - {shift}, {when}, {where}."
+    if not attendees:
+        return f"{head} No RSVPs yet."
+    names = [(rsvp.name or "").strip() or "(no name)" for rsvp in attendees]
+    shown = names[:ROSTER_NAME_LIMIT]
+    hidden = len(names) - len(shown)
+    roster = ", ".join(shown) + (f" (+{hidden} more)" if hidden else "")
+    return f"{head} {len(names)} going: {roster}."

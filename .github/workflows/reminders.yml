@@ -43,9 +43,12 @@ jobs:
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
-          # Organizer's cell for new-RSVP alerts. Unset (or Twilio unset) disables the alerts.
+          # Organizer's cell for the new-RSVP alerts and the pre-shift roster digest.
+          # Unset (or Twilio unset) disables both.
           JACK_PHONE: ${{ secrets.JACK_PHONE }}
           NEW_RSVP_LOOKBACK: ${{ vars.NEW_RSVP_LOOKBACK }}
+          # Lead time on the roster digest; set the variable to "off" to disable it.
+          ROSTER_DIGEST_OFFSET: ${{ vars.ROSTER_DIGEST_OFFSET }}
           DEFAULT_REMINDER_OFFSETS: ${{ vars.DEFAULT_REMINDER_OFFSETS }}
           TIMEZONE: ${{ vars.TIMEZONE }}
           CAMPAIGN_NAME: ${{ vars.CAMPAIGN_NAME }}
