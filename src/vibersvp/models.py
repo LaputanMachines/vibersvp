@@ -110,7 +110,7 @@ class RosterDigest:
 
     @property
     def offset_label(self) -> str:
-        """Label written to ReminderLog's Offset column, e.g. 'roster-2h'."""
+        """Label written to ReminderLog's Offset column, e.g. 'roster-3h'."""
         return ROSTER_OFFSET_PREFIX + self.offset.label
 
     @property

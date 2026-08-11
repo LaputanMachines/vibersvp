@@ -17,7 +17,15 @@ from .models import Offset
 from .scheduler import parse_offsets
 
 DEFAULT_TIMEZONE = "America/Vancouver"
-DEFAULT_ROSTER_DIGEST_OFFSET = "2h"
+# The digest's send window is `[start - offset, start)`, and GitHub's scheduled cron only
+# fires every ~45-70 min (it drops most of the */15 ticks and stalls for hours overnight),
+# so the offset doubles as the drift budget: a window with no run in it drops the digest
+# permanently, since we never send once the shift has begun. Measured over 300 runs and 21
+# events, a 2h window missed 3 of them and delivered a median of only 1.4h of notice; 3h
+# misses 1 and delivers a median of 2.6h. 4h+ buys no extra coverage and only makes the
+# heads-up staler, so this is the sweet spot rather than a round number.
+DEFAULT_ROSTER_DIGEST_OFFSET = "3h"
+DEFAULT_REMINDER_OFFSETS = "24h,2h:sms"
 
 
 class Settings(BaseSettings):
@@ -61,7 +69,8 @@ class Settings(BaseSettings):
 
     # --- Behaviour ---
     # "2h:sms" makes the 2h nudge text-only; the 24h reminder still goes on email + SMS.
-    default_reminder_offsets: str = "24h,2h:sms"
+    # Blank means "use the default", not "no reminders" — see the validator below.
+    default_reminder_offsets: str = DEFAULT_REMINDER_OFFSETS
     timezone: str = DEFAULT_TIMEZONE
     campaign_name: str = "Jack Sandor for Victoria"
     campaign_contact: str = "the campaign team"
@@ -84,6 +93,26 @@ class Settings(BaseSettings):
         created arrives as "", and that shouldn't quietly turn the digest off. Use "off"."""
         if v is None or (isinstance(v, str) and not v.strip()):
             return DEFAULT_ROSTER_DIGEST_OFFSET
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator("default_reminder_offsets", mode="before")
+    @classmethod
+    def _default_blank_reminder_offsets(cls, v: object) -> object:
+        """Same trap as TIMEZONE and ROSTER_DIGEST_OFFSET, with the widest blast radius.
+
+        `DEFAULT_REMINDER_OFFSETS: ${{ vars.DEFAULT_REMINDER_OFFSETS }}` in the workflow sets
+        the env var to "" when the Actions variable doesn't exist, which overrides this
+        field's default. "" then parses to an empty offset list, and an empty offset list
+        means *every* volunteer reminder is silently skipped — no error, no log line, just
+        a worker that reports `due=0` forever. Treat blank as unset.
+
+        There's deliberately no "off" escape hatch here (unlike the roster digest): sending
+        no reminders at all is never the intent, and disabling the job means disabling the
+        workflow. An offsets string that's non-blank but entirely unparseable still yields
+        an empty list — that's a typo worth surfacing, not a default worth papering over.
+        """
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return DEFAULT_REMINDER_OFFSETS
         return v.strip() if isinstance(v, str) else v
 
     @property

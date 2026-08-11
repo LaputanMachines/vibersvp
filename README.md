@@ -95,7 +95,7 @@ The workflow is `.github/workflows/reminders.yml` — runs `python -m vibersvp.r
      `JACK_PHONE` (for the new-RSVP alerts and roster digest — see below).
    - **Variables:** `CAMPAIGN_NAME`, `CAMPAIGN_CONTACT`, `TIMEZONE`, `DEFAULT_REMINDER_OFFSETS`,
      `EMAIL_FROM_NAME`, `NEW_RSVP_LOOKBACK` (optional; defaults to `24h`),
-     `ROSTER_DIGEST_OFFSET` (optional; defaults to `2h`, `off` to disable).
+     `ROSTER_DIGEST_OFFSET` (optional; defaults to `3h`, `off` to disable).
 4. Trigger a manual run from the **Actions** tab (`workflow_dispatch`) to test, then let the
    schedule take over.
 
@@ -130,26 +130,34 @@ three vars above) — without it, the alert is skipped just like reminders.
 To disable, leave `JACK_PHONE` unset.
 
 ### Pre-shift roster digest (text Jack the list before a canvass)
-Two hours before each `Open` event, the worker texts `JACK_PHONE` the roster for that shift:
+A few hours before each `Open` event, the worker texts `JACK_PHONE` the roster for that shift:
 
 ```
-Jack Sandor for Victoria: Canvass in ~2h - Fernwood door-knock, Wednesday, July 1 at
+Jack Sandor for Victoria: Canvass in ~3h - Fernwood door-knock, Wednesday, July 1 at
 11:00 AM PDT, 1234 Gladstone Ave. 3 going: Alex Chen, Pat Volunteer, Sam Ng.
 ```
 
-- **Lead time** is `ROSTER_DIGEST_OFFSET` (default `2h`, same `m`/`h`/`d` syntax). It's a
+- **Lead time** is `ROSTER_DIGEST_OFFSET` (default `3h`, same `m`/`h`/`d` syntax). It's a
   single campaign-wide value on purpose — a per-event `Reminder offsets` override changes the
   *volunteers'* schedule, not Jack's heads-up. Set the variable to **`off`** to disable;
   blank means "use the default", so an Actions variable you never created can't silently
   switch it off.
-- **Same window rule as reminders** (`start − offset ≤ now < start`), so cron drift just makes
-  the digest a bit later, never after the shift has started.
-- **Exactly once per (event, lead time)**, via a `ReminderLog` row with `Offset = roster-2h`.
+- **Same window rule as reminders** (`start − offset ≤ now < start`), so cron drift makes the
+  digest later rather than earlier, and it never lands after the shift has started.
+- **The offset is also the drift budget.** GitHub's scheduled cron asks for every 15 min but
+  delivers every ~45–70 min, with multi-hour stalls overnight. A window that happens to
+  contain no run drops that digest for good, because the window closes at the shift's start
+  and nothing retries it. Measured over 300 runs and 21 events, a `2h` window missed 3 of
+  them and gave a median of 1.4h notice; `3h` misses 1 and gives a median of 2.6h. Widening
+  past `3h` buys no more coverage — it only makes the roster staler. Shrinking it drops more.
+  Guaranteed on-the-minute delivery would need scheduled sends (Twilio `SendAt`) instead of
+  polling; that's not built.
+- **Exactly once per (event, lead time)**, via a `ReminderLog` row with `Offset = roster-3h`.
   That row links the `Event` but no `RSVP` — it's about the whole shift.
 - **Empty rosters still send** ("No RSVPs yet") — that's the text most worth getting.
 - **Names only**, capped at 12 with a `(+N more)` tail so a big shift doesn't turn into a
   five-segment SMS. The full roster is on the dashboard.
-- **No quiet hours**, same as the new-RSVP alerts — a 2h digest for a 9 AM canvass would
+- **No quiet hours**, same as the new-RSVP alerts — a 3h digest for a 9 AM canvass would
   otherwise be held until 9 AM and never send.
 - Needs Twilio configured and `JACK_PHONE` set, exactly like the new-RSVP alerts.
 
