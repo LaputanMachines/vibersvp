@@ -26,6 +26,7 @@ DEFAULT_TIMEZONE = "America/Vancouver"
 # heads-up staler, so this is the sweet spot rather than a round number.
 DEFAULT_ROSTER_DIGEST_OFFSET = "3h"
 DEFAULT_REMINDER_OFFSETS = "24h,2h:sms"
+DEFAULT_EMAIL_FROM_NAME = "Jack Sandor Campaign"
 
 
 class Settings(BaseSettings):
@@ -46,7 +47,7 @@ class Settings(BaseSettings):
     # --- Email via Resend (required for email reminders) ---
     resend_api_key: str | None = None
     email_from: str | None = None
-    email_from_name: str = "Jack Sandor Campaign"
+    email_from_name: str = DEFAULT_EMAIL_FROM_NAME
     email_reply_to: str | None = None
 
     # --- SMS via Twilio (optional until the number is verified) ---
@@ -84,6 +85,22 @@ class Settings(BaseSettings):
         which then crashes ZoneInfo(""). Treat blank/whitespace as unset."""
         if v is None or (isinstance(v, str) and not v.strip()):
             return DEFAULT_TIMEZONE
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator("email_from_name", mode="before")
+    @classmethod
+    def _default_blank_email_from_name(cls, v: object) -> object:
+        """Same blank-env-var trap as TIMEZONE, and it breaks every email send.
+
+        `EMAIL_FROM_NAME: ${{ vars.EMAIL_FROM_NAME }}` sets the env var to "" when the
+        Actions variable doesn't exist, overriding this field's default. The notifier then
+        composes `from` as `" <hello@example.com>"` — a leading space and an empty display
+        name — which Resend rejects with "Invalid `from` field", so no email goes out at
+        all. Treat blank as unset. (The notifier also drops the name when it's blank, so
+        neither layer alone can produce that malformed header.)
+        """
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return DEFAULT_EMAIL_FROM_NAME
         return v.strip() if isinstance(v, str) else v
 
     @field_validator("roster_digest_offset", mode="before")

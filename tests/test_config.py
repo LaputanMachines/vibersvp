@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from vibersvp.config import (
+    DEFAULT_EMAIL_FROM_NAME,
     DEFAULT_REMINDER_OFFSETS,
     DEFAULT_ROSTER_DIGEST_OFFSET,
     DEFAULT_TIMEZONE,
@@ -23,6 +24,26 @@ def make_settings(**overrides) -> Settings:
     base = dict(airtable_api_token="pat_test", airtable_base_id="appTest")
     base.update(overrides)
     return Settings(_env_file=None, **base)
+
+
+# --- email_from_name ---------------------------------------------------------
+
+def test_blank_email_from_name_falls_back_to_the_default():
+    # "" composes the Resend `from` as " <addr>", which the API rejects with
+    # "Invalid `from` field" — so a missing Actions variable killed every email send.
+    assert make_settings(email_from_name="").email_from_name == DEFAULT_EMAIL_FROM_NAME
+
+
+def test_whitespace_email_from_name_falls_back_to_the_default():
+    assert make_settings(email_from_name="   ").email_from_name == DEFAULT_EMAIL_FROM_NAME
+
+
+def test_email_from_name_is_stripped():
+    assert make_settings(email_from_name="  Jack Sandor  ").email_from_name == "Jack Sandor"
+
+
+def test_explicit_email_from_name_wins_over_the_default():
+    assert make_settings(email_from_name="Jack Sandor").email_from_name == "Jack Sandor"
 
 
 # --- default_reminder_offsets ------------------------------------------------
