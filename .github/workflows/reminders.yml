@@ -1,11 +1,11 @@
 name: Send RSVP reminders
 
 on:
-  schedule:
+  # schedule:
     # Every 15 minutes (UTC). GitHub cron is best-effort and drifts 5–30 min;
     # the worker is idempotent and window-based, so drift is harmless.
     # If this repo is PRIVATE, widen this (e.g. "*/30 * * * *") to stay within free minutes.
-    - cron: "*/15 * * * *"
+    # - cron: "*/15 * * * *"
   workflow_dispatch: {}  # lets you trigger a run by hand from the Actions tab
 
 permissions:
